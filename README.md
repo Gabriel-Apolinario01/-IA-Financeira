@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # IA Financeira
 
 Aplicação para registrar receitas e despesas, acompanhar o orçamento, organizar dívidas, planejar metas e explorar cenários de acumulação. Interface em português, valores em reais e modo demonstrativo separado das contas pessoais.
@@ -97,3 +98,6 @@ Não há integração bancária, Open Finance, Pix, corretora, importação de e
 ## Publicação
 
 `.openai/hosting.json` identifica o único Site privado deste projeto e o binding D1. O fluxo Sites aplica as migrações publicadas e configura a autenticação. A publicação inicial fica privada para o proprietário; compartilhar com colegas exige alterar explicitamente a audiência. O endereço esperado antes da publicação não é prova de uma versão ativa.
+=======
+# MVP-IA-Financeira
+>>>>>>> c2ad17b884dde254e23f8adf86dfed981f9da0a0
