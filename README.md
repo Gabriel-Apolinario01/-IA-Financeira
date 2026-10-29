@@ -1,6 +1,6 @@
 # IA Financeira Azure
 
-Cópia preparada para executar como aplicação Node.js no Azure. A demonstração usa valores fictícios e continua disponível sem login. Contas autenticadas usam Microsoft Entra ID no Azure App Service e Azure Database for PostgreSQL Flexible Server.
+Cópia preparada para executar como aplicação Node.js no Azure. A demonstração usa valores fictícios e continua disponível sem login. A prévia pode rodar no plano gratuito F1 sem serviços adicionais; contas autenticadas exigem Microsoft Entra ID no Azure App Service e Azure Database for PostgreSQL Flexible Server.
 
 ## Ver a demonstração neste computador
 
@@ -26,6 +26,12 @@ Para encerrar, pressione Ctrl+C no terminal.
 O schema é criado por `npm run prepare:azure-db` ou durante `npm start`. A migração usa `CREATE TABLE IF NOT EXISTS` e preserva tabelas existentes. Ela não copia dados de nenhum banco D1 anterior.
 
 ## Configuração do Azure
+
+### Prévia gratuita
+
+O script `npm start` assume `AZURE_AUTH_MODE=preview` quando a variável não foi definida. Nesse modo, o App Service serve a página inicial e a demonstração pública sem banco. Os dados da demonstração ficam no armazenamento local do navegador; as APIs de conta continuam exigindo uma identidade Microsoft válida e não aceitam gravações anônimas. Não configure credenciais de banco para essa prévia.
+
+### Contas autenticadas
 
 1. Crie um Azure App Service Linux com Node.js 24 e um Azure Database for PostgreSQL Flexible Server.
 2. No App Service, habilite uma identidade gerenciada atribuída pelo sistema e configure **Authentication** com Microsoft Entra ID. Restrinja o aplicativo ao tenant pretendido. Permita acesso anônimo à página inicial para que a demonstração permaneça disponível; as rotas `/api/*` validam a identidade no servidor.
