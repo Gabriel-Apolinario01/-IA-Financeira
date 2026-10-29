@@ -33,7 +33,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: |
+            .
+            !.git/**
+            !.github/**
+            !**/.env
+            !**/.env.*
+            !**/.next/cache/**
+            !**/.azure-data/**
+          include-hidden-files: true
 
   deploy:
     runs-on: ubuntu-latest
@@ -62,4 +70,3 @@ jobs:
           app-name: 'iafinanceira'
           slot-name: 'Production'
           package: .
-          
