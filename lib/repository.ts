@@ -10,20 +10,6 @@ export interface SqlGateway {
   batch(statements: SqlStatement[]): Promise<void>;
 }
 
-// Production uses D1; tests run the same SQL against real SQLite.
-export function d1Gateway(database: D1Database): SqlGateway {
-  return {
-    get: <T>(sql: string, values: SqlValue[]) => database.prepare(sql).bind(...values).first<T>(),
-    async run(sql, values) {
-      const result = await database.prepare(sql).bind(...values).run();
-      return { changes: result.meta.changes };
-    },
-    async batch(statements) {
-      await database.batch(statements.map(({ sql, values }) => database.prepare(sql).bind(...values)));
-    },
-  };
-}
-
 export class RepositoryError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);

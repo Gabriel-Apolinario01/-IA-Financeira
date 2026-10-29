@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { isValidMonth } from "../../../lib/finance";
 import { explainMonth } from "../../../lib/explanations";
 import { RepositoryError } from "../../../lib/repository";
@@ -17,7 +16,7 @@ export async function POST(request: Request) {
     await repository.consumeRate(ownerId, "diagnosis", 10);
     const { state } = await readWithTimeout(repository.get(ownerId));
     const result = await explainMonth(state, body.month, typeof body.question === "string" ? body.question : "Como organizar meu orçamento?", {
-      key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL, enabled: env.AI_ENABLED,
+      key: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL, enabled: process.env.AI_ENABLED,
     });
     return jsonResponse(result);
   } catch (error) { return errorResponse(error); }

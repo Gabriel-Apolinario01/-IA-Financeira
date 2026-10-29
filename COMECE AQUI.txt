@@ -1,48 +1,15 @@
-IA FINANCEIRA — COMO ABRIR
+IA FINANCEIRA AZURE — COMO ABRIR
 
-1. Dê dois cliques em "Abrir IA Financeira.cmd".
-2. Aguarde aparecer "Local: http://127.0.0.1:5173/".
-3. Abra http://127.0.0.1:5173/ no navegador.
-4. Escolha "Explorar demonstração" para conhecer o aplicativo.
+1. Abra um terminal nesta pasta.
+2. Execute: npm run dev
+3. Abra: http://127.0.0.1:5174/
+4. Use “Acessar demonstração” na tela de login para testar a aplicação com dados fictícios.
 
-Mantenha a janela do iniciador aberta durante o uso. Para encerrar,
-pressione Ctrl+C nessa janela. Feche uma execução anterior antes de
-iniciar outra: a porta 5173 é fixa.
+Os dados da demonstração são fictícios e ficam neste navegador. A prévia local não usa login Microsoft nem banco Azure. Para encerrar, pressione Ctrl+C no terminal.
 
-O QUE ESTÁ PRONTO
-Receitas e despesas, orçamento por categoria, dívidas com parcela
-vinculada, cenários de economia, metas e reserva com histórico,
-conteúdo educativo e simulador de acumulação.
+ARQUITETURA DA CÓPIA AZURE
+- Node.js e Next.js no Azure App Service.
+- Microsoft Entra ID pelo App Service Authentication.
+- Azure Database for PostgreSQL com identidade gerenciada.
 
-Demonstração: exemplos fictícios salvos no navegador. É possível
-restaurar os exemplos ou iniciar uma demonstração vazia em Configurações.
-
-Começar: neste ambiente local, abre uma identidade de TESTE identificada
-na interface. Os registros dessa identidade ficam no banco .wrangler/state,
-separados dos exemplos. Isso NÃO é autenticação real de produção.
-
-O QUE AINDA DEPENDE DE CONFIGURAÇÃO EXTERNA
-O projeto de hospedagem foi criado em uma conta anterior. A conta atual
-não tem acesso a ele, portanto não há link online publicado nesta entrega.
-A autenticação real ChatGPT/Sites precisa da publicação acessível.
-
-A chave do provedor de IA não está configurada. O diagnóstico disponível
-é "Análise automática por regras", com números calculados e fontes
-educativas revisadas. O orçamento e o simulador funcionam sem essa chave.
-
-ARQUIVOS
-README.md: instalação, arquitetura, regras e limitações.
-VERIFICACAO.md: testes e verificações realmente executados.
-app/ e components/: interface e rotas.
-lib/: cálculos, validação, persistência e explicações.
-db/ e drizzle/: estrutura e migração do banco.
-tests/: testes automatizados.
-.env.example: variáveis de exemplo, sem segredos.
-
-A pasta entregue inclui as dependências para este computador Windows.
-Em outro computador, instale Node.js 22.13 ou superior e siga o README.
-O ZIP de código-fonte não inclui dependências nem dados de contas.
-
-Não apague .wrangler/state depois de começar a usar uma conta local:
-essa pasta guarda seus registros. Exporte seus dados em Configurações
-antes de remover ou substituir uma instalação usada.
+O aplicativo ainda não foi publicado em uma assinatura Azure. Consulte README.md para provisionar os recursos e conectar o App Service.
