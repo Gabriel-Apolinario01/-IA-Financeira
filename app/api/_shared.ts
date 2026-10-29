@@ -1,20 +1,15 @@
-import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../chatgpt-auth";
-import { d1Gateway, FinanceRepository, RepositoryError } from "../../lib/repository";
+import { getAzureUser } from "../azure-auth";
+import { azurePostgresGateway, hasAzurePostgresConfig } from "../../lib/azure-postgres";
+import { FinanceRepository, RepositoryError } from "../../lib/repository";
 
 export async function authenticatedContext(request: Request) {
-  const user = await getChatGPTUser();
-  const hostname = new URL(request.url).hostname;
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
-  // The starter supplies a development identity only after local sign-in.
-  // Anonymous loopback requests still receive 401, just like hosted requests.
-  const localPreview = loopback && process.env.NODE_ENV !== "production";
-  if (!user) throw new RepositoryError(401, "Entre na sua conta para continuar.");
-  if (!env.DB) throw new RepositoryError(503, "O armazenamento está indisponível. Tente novamente em instantes.");
+  const user = getAzureUser(request.headers);
+  if (!user) throw new RepositoryError(401, "Entre com sua conta Microsoft para continuar.");
+  if (!hasAzurePostgresConfig()) throw new RepositoryError(503, "O banco Azure ainda não está configurado.");
   return {
     ownerId: user.userId,
-    identity: { displayName: user.displayName, localPreview },
-    repository: new FinanceRepository(d1Gateway(env.DB)),
+    identity: { displayName: user.displayName, localPreview: false },
+    repository: new FinanceRepository(azurePostgresGateway()),
   };
 }
 

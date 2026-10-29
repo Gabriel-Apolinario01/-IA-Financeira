@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IA Financeira — seu dinheiro, com mais clareza",
+  title: "IA Financeira Azure — seu dinheiro, com mais clareza",
   description: "Entenda seu orçamento, organize compromissos e planeje suas economias. Uma decisão possível de cada vez.",
   icons: {
     icon: "/favicon.svg",
