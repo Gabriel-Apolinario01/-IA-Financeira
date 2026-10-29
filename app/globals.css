@@ -16,3 +16,16 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 /* Readable secondary text on the pale surfaces. */
 .sidebar-note p,.donut small,.donut span,.date-tile small,.insight-card .eyebrow{color:#53634f}.insight-card p,.education-card p,.diagnosis p,.saving-card>p{font-size:1rem}
 
+
+.import-panel { margin-bottom:24px; }
+.import-controls { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; }
+.import-controls label { display:grid; gap:8px; flex:1; min-width:200px; }
+.import-drop { padding:20px; border:1px dashed #89948c; border-radius:12px; }
+.import-drop input { display:block; margin-top:12px; max-width:100%; }
+.import-table { overflow-x:auto; margin:20px 0; }
+.import-table table { width:100%; border-collapse:collapse; min-width:640px; }
+.import-table th, .import-table td { padding:10px; text-align:left; border-bottom:1px solid #ddd; }
+.import-panel details { padding:12px 0; border-bottom:1px solid #ddd; }
+.import-panel summary { cursor:pointer; }
+.import-hash { overflow-wrap:anywhere; }
+

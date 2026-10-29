@@ -46,6 +46,24 @@ const debt = (id: string, transactionId: string): Command => ({ id: `debt-${id}`
 } });
 const status = (code: number) => (error: unknown) => error instanceof RepositoryError && error.status === code;
 
+test('imports are atomic, durable, isolated and safe on concurrent retries', async () => {
+  const { db, repository } = database();
+  try {
+    const initial = await repository.get('owner-import');
+    const command: Command = { id:'batch1', type:'import.commit', payload:{ name:'a.csv', account:'Principal', locale:'br', content:'data;descricao;valor\n2026-10-29;Loja;-12,34', accepted:[2], hash:'forged', ownerId:'victim' } };
+    const results = await Promise.allSettled([repository.execute('owner-import',command,0,initial.generation),repository.execute('owner-import',command,0,initial.generation)]);
+    assert.ok(results.some(r => r.status === 'fulfilled'));
+    const current = await repository.get('owner-import');
+    assert.equal(current.state.transactions.length,1);
+    assert.equal(current.revision,1);
+    assert.notEqual(current.state.importBatches![0].hash,'forged');
+    assert.equal((await repository.get('victim')).state.transactions.length,0);
+    await assert.rejects(execute(repository,'victim',{id:'revert',type:'import.revert',payload:{id:'batch1'}},0),status(400));
+    await assert.rejects(execute(repository,'owner-import',{...command,id:'batch2'},1),status(400));
+    assert.equal((await repository.get('owner-import')).revision,1);
+  } finally { db.close(); }
+});
+
 test("an empty account persists across repository instances and never receives demo data", async () => {
   const { db, gateway, repository } = database();
   try {

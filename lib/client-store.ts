@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyCommand } from "./commands";
+import { executeFinanceCommand } from "./imports";
 import { demoState, emptyState } from "./demo";
 import type { Command, FinanceState } from "./types";
 
@@ -74,7 +74,7 @@ export function useFinance() {
     const command: Command = { id: commandId, type, payload };
     try {
       if (mode === "demo") {
-        const next = applyCommand(stateRef.current, command);
+        const next = await executeFinanceCommand(stateRef.current, command);
         try { localStorage.setItem(DEMO_KEY, JSON.stringify(next)); }
         catch { throw new Error("O navegador não permitiu salvar a demonstração. Libere o armazenamento local e tente novamente."); }
         apply(next);

@@ -98,7 +98,7 @@ export function validateGoalHistory(state: FinanceState, goalId: string): void {
     if (balance < 0) throw new Error('Esta saída deixaria o saldo da meta negativo em parte do histórico. Confira o valor e a data.');
   }
 }
-function validateMagnitude(state: FinanceState) {
+export function validateMagnitude(state: FinanceState) {
   const collections = [state.transactions, state.budgets, state.goals, state.movements, state.debts, state.savingActions];
   if (collections.some(rows => rows.length > MAX_RECORDS)) throw new Error('Esta coleção atingiu o limite de 10.000 registros do MVP.');
   // Absolute sums prevent hidden overflow even when opposite signs would cancel.
@@ -122,6 +122,7 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
       break;
     }
     case 'transaction.save': {
+      if (state.transactions.some(t => t.id === payload.id && t.origin) || (typeof payload.id === 'string' && payload.id.startsWith('imp_') && state.importBatches?.some(b => b.transactions.some(t => t.id === payload.id)))) throw new Error('Lançamento importado: desfaça o lote no histórico para corrigir a fonte.');
       const item = transaction(payload);
       if (state.debts.some(debt => debt.transactionId === item.id) && (item.type !== 'expense' || item.category !== 'dividas')) throw new Error('Este lançamento está vinculado a uma dívida. Mantenha-o como despesa de dívidas ou desfaça o vínculo antes de alterar.');
       next.transactions = replace(state.transactions, item);
@@ -132,6 +133,7 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
     }
     case 'transaction.delete': {
       const item = existing(state.transactions, payload.id, 'Lançamento');
+      if (item.origin) throw new Error('Lançamento importado: use Desfazer lote no histórico para preservar a origem.');
       next.transactions = state.transactions.filter(row => row.id !== item.id);
       next.debts = state.debts.map(debt => debt.transactionId === item.id ? { ...debt, transactionId: null } : debt);
       break;
@@ -185,6 +187,7 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
       }
       if (item.transactionId) {
         const linked = existing(state.transactions, item.transactionId, 'Lançamento vinculado');
+        if (linked.origin) throw new Error('Vínculos de dívidas com importações ainda não são suportados.');
         if (linked.type !== 'expense' || linked.category !== 'dividas') throw new Error('Vincule uma despesa existente na categoria Dívidas.');
         if (state.debts.some(debt => debt.id !== item.id && debt.transactionId === item.transactionId)) throw new Error('Este lançamento já está vinculado a outra dívida.');
       }

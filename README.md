@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # IA Financeira
 
 Aplicação para registrar receitas e despesas, acompanhar o orçamento, organizar dívidas, planejar metas e explorar cenários de acumulação. Interface em português, valores em reais e modo demonstrativo separado das contas pessoais.
@@ -93,11 +92,12 @@ Com `npm run dev` em execução e uma identidade local vazia, `node scripts/test
 
 Além da revisão numérica, cada resposta da conta contém uma geração de armazenamento. Comandos precisam reenviar essa geração: uma aba aberta antes de excluir a conta não pode recriar registros antigos quando a nova conta alcançar o mesmo número de revisão.
 
-Não há integração bancária, Open Finance, Pix, corretora, importação de extrato, recorrência automática, transação monetária, aconselhamento de ativos ou sincronização entre a demo e contas pessoais. Apostas podem ser registradas manualmente em Outros; não são a experiência principal.
+Não há integração bancária, Open Finance, Pix, corretora, recorrência automática, transação monetária, aconselhamento de ativos ou sincronização entre a demo e contas pessoais. Apostas podem ser registradas manualmente em Outros; não são a experiência principal.
 
 ## Publicação
 
 `.openai/hosting.json` identifica o único Site privado deste projeto e o binding D1. O fluxo Sites aplica as migrações publicadas e configura a autenticação. A publicação inicial fica privada para o proprietário; compartilhar com colegas exige alterar explicitamente a audiência. O endereço esperado antes da publicação não é prova de uma versão ativa.
-=======
-# MVP-IA-Financeira
->>>>>>> c2ad17b884dde254e23f8adf86dfed981f9da0a0
+
+## Importação de extratos — primeira etapa
+
+A tela Lançamentos inclui CSV/TSV e OFX com prévia e seleção por linha. Confira [a entrega e suas limitações](docs/ENTREGA.md), [a descoberta](docs/DESCOBERTA.md) e [as decisões de importação](docs/ADR-001-IMPORTACAO.md). Build e validação visual desta alteração permanecem pendentes.

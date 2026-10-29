@@ -1,4 +1,4 @@
-import { applyCommand } from "./commands";
+import { executeFinanceCommand } from "./imports";
 import { emptyState } from "./demo";
 import type { Command, FinanceState } from "./types";
 
@@ -121,7 +121,7 @@ export class FinanceRepository {
     }
     let state: FinanceState;
     try {
-      state = applyCommand(snapshot(row).state, command);
+      state = await executeFinanceCommand(snapshot(row).state, command);
     } catch (error) {
       throw new RepositoryError(400, error instanceof Error ? error.message : "Confira os dados informados.");
     }

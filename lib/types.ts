@@ -10,6 +10,7 @@ export interface Profile {
   confirmedNoIncomeMonths: string[];
 }
 export interface Transaction {
+  origin?: { batchId: string; line: number; externalId?: string; account: string; currency: 'BRL'; timezone: 'America/Sao_Paulo'; originalDescription: string };
   id: string; description: string; amount: number;
   type: 'income' | 'expense'; category: string; date: string;
   status: 'planned' | 'realized'; expenseKind: 'fixed' | 'variable';
@@ -34,6 +35,7 @@ export interface SavingAction {
   baseAmount: number; estimatedSaving: number;
 }
 export interface FinanceState {
+  importBatches?: import('./imports').ImportBatch[];
   profile: Profile; transactions: Transaction[]; budgets: Budget[];
   goals: Goal[]; movements: Movement[]; debts: Debt[]; savingActions: SavingAction[];
 }
