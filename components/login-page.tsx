@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, ShieldCheck, Sprout } from "lucide-react";
 
 export default function LoginPage({ localPreviewAvailable }: { localPreviewAvailable: boolean }) {
@@ -56,11 +57,11 @@ export default function LoginPage({ localPreviewAvailable }: { localPreviewAvail
 
   return <main className="login-page">
     <header className="login-nav">
-      <a href="/" className="login-brand" aria-label="IA Financeira, início">
+      <Link href="/" prefetch={false} className="login-brand" aria-label="IA Financeira, início">
         <span className="brand-mark"><Sprout size={23} strokeWidth={1.8} /></span>
         <span>IA<span className="brand-light">Financeira</span></span>
-      </a>
-      <a href="/" className="text-link"><ArrowLeft size={16} /> Página inicial</a>
+      </Link>
+      <Link href="/" prefetch={false} className="text-link"><ArrowLeft size={16} /> Página inicial</Link>
     </header>
 
     <section className="login-layout">
@@ -111,7 +112,7 @@ export default function LoginPage({ localPreviewAvailable }: { localPreviewAvail
         <div className="login-preview">
           <span className="login-divider"><span>OU</span></span>
           <p>Quer conhecer os recursos primeiro?</p>
-          <a className="button secondary login-preview-button" href="/?mode=demo">Acessar demonstração</a>
+          <Link className="button secondary login-preview-button" href="/?mode=demo" prefetch={false}>Acessar demonstração</Link>
           <small>Os exemplos são fictícios e ficam salvos somente neste navegador.</small>
         </div>
       </div>

@@ -5,7 +5,8 @@ import { isValidMonth, monthMetrics } from './finance';
 
 // Progressive enhancement: no browser support is required for the visible app.
 export function useFinanceTools(state:FinanceState, enabled:boolean) {
-  const current=useRef(state);current.current=state;
+  const current=useRef(state);
+  useEffect(()=>{current.current=state;},[state]);
   useEffect(()=>{
     if(!enabled)return;
     const context=(document as Document & {modelContext?:{registerTool:(tool:unknown,options:{signal:AbortSignal})=>void|Promise<void>}}).modelContext;
