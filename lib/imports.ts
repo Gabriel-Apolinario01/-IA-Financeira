@@ -1,6 +1,7 @@
 import { isValidDate, MAX_MONEY } from './finance';
 import type { Command, FinanceState, Transaction } from './types';
 import { applyCommand, validateMagnitude } from './commands';
+import { validateTransactionNature } from './transaction-nature';
 
 export type ImportRow = { line: number; date: string; description: string; amount: number; externalId?: string; raw?: string; error?: string };
 export type ImportBatch = { id: string; hash: string; account: string; name: string; source: 'csv' | 'ofx'; status: 'confirmed' | 'ignored'; createdAt: string; rows: ImportRow[]; transactions: Transaction[]; duplicates: number; ignored: number; errors: number; audit: { at: string; action: string }[] };
@@ -110,6 +111,20 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
   if (!Array.isArray(accepted) || accepted.some(n => !Number.isInteger(n)) || new Set(accepted).size !== accepted.length) throw new Error('Seleção de linhas inválida.');
   const parsed = parseImport(name as string, content as string, locale as 'br' | 'us');
   if (accepted.some(n => !parsed.rows.some(r => r.line === n && !r.error))) throw new Error('Há linhas inválidas na seleção.');
+  // Optional reviewed-flow contract. Old clients may omit it; absence never rewrites legacy data.
+  const natures = new Map<number, ReturnType<typeof validateTransactionNature>>();
+  if (Object.hasOwn(command.payload, 'natures')) {
+    const input = command.payload.natures;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Revisão de naturezas inválida.');
+    for (const [key, value] of Object.entries(input)) {
+      const line = Number(key);
+      if (!/^[1-9]\d*$/.test(key) || !accepted.includes(line)) throw new Error('Linha de revisão inválida.');
+      const nature = validateTransactionNature(value);
+      if (nature === 'unidentified') throw new Error('Revise a natureza antes de confirmar a importação.');
+      natures.set(line, nature);
+    }
+    if (accepted.some(line => !natures.has(line))) throw new Error('Revise a natureza de todas as linhas selecionadas.');
+  }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content as string));
   const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   const sameFile = batches.filter(b => b.hash === hash && b.source === parsed.source && b.account === account);
@@ -130,6 +145,7 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
       duplicates++; continue;
     }
     const transaction: Transaction = { id: `imp_${scopedHash.slice(0,32)}_${row.line}`, date: row.date, description: row.description, amount: Math.abs(row.amount), type: row.amount < 0 ? 'expense' : 'income', category: 'outros', status: 'realized', expenseKind: 'variable' };
+    if (natures.has(row.line)) transaction.nature = natures.get(row.line)!;
     if (next.transactions.some(t => t.id === transaction.id)) throw new Error('Identificador já existente. Revise o histórico.');
     next = applyCommand(next, { id: command.id, type: 'transaction.save', payload: { ...transaction } });
     transaction.origin = { batchId: command.id, line: row.line, externalId: row.externalId, account, currency: 'BRL', timezone: 'America/Sao_Paulo', originalDescription: row.description };

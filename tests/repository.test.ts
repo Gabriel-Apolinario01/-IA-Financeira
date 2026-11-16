@@ -46,6 +46,89 @@ const debt = (id: string, transactionId: string): Command => ({ id: `debt-${id}`
 } });
 const status = (code: number) => (error: unknown) => error instanceof RepositoryError && error.status === code;
 
+for (const nature of ['income', 'expense', 'transfer', 'invoice_payment', 'refund', 'unidentified'] as const) {
+  test(`server persists and reloads the valid nature ${nature}`, async () => {
+    const { db, gateway, repository } = database();
+    try {
+      const command = transaction('nature'); command.payload.nature = nature;
+      await execute(repository, 'A', command, 0);
+      const restored = await new FinanceRepository(gateway).get('A');
+      assert.equal(restored.state.transactions[0].nature, nature);
+      const exported = JSON.parse(JSON.stringify(await repository.export('A')));
+      assert.equal(exported.state.transactions[0].nature, nature);
+    } finally { db.close(); }
+  });
+}
+
+test('server rejects invalid nature values without changing the persisted revision', async () => {
+  const { db, repository } = database();
+  try {
+    await execute(repository, 'A', transaction('legacy'), 0);
+    for (const nature of ['invalid-secret-value', null, undefined, 42, true, [], {}, { type:'income' }]) {
+      const command = transaction('invalid'); command.payload.nature = nature;
+      await assert.rejects(execute(repository, 'A', command, 1), error =>
+        error instanceof RepositoryError && error.status === 400 && error.message === 'Natureza financeira inválida.');
+    }
+    const snapshot = await repository.get('A');
+    assert.equal(snapshot.revision, 1);
+    assert.equal(snapshot.state.transactions.length, 1);
+    assert.equal(Object.hasOwn(snapshot.state.transactions[0], 'nature'), false);
+  } finally { db.close(); }
+});
+
+test('updates preserve nature for older clients while legacy records stay unclassified', async () => {
+  const { db, repository } = database();
+  try {
+    await execute(repository, 'A', transaction('legacy'), 0);
+    const legacyEdit = transaction('legacy', 100); legacyEdit.id = 'edit-legacy';
+    await execute(repository, 'A', legacyEdit, 1);
+    assert.equal(Object.hasOwn((await repository.get('A')).state.transactions[0], 'nature'), false);
+    const classify = transaction('legacy', 100); classify.id = 'classify'; classify.payload.nature = 'transfer';
+    await execute(repository, 'A', classify, 2);
+    const oldClientEdit = transaction('legacy', 200); oldClientEdit.id = 'edit-classified';
+    await execute(repository, 'A', oldClientEdit, 3);
+    assert.equal((await repository.get('A')).state.transactions[0].nature, 'transfer');
+    const reclassify = transaction('legacy', 200); reclassify.id = 'reclassify'; reclassify.payload.nature = 'expense';
+    await execute(repository, 'A', reclassify, 4);
+    assert.equal((await repository.get('A')).state.transactions[0].nature, 'expense');
+  } finally { db.close(); }
+});
+
+test('unknown transaction fields cannot set internal provenance or another owner', async () => {
+  const { db, repository } = database();
+  try {
+    const command = transaction('safe');
+    Object.assign(command.payload, JSON.parse('{"nature":"expense","origin":{"batchId":"forged"},"ownerId":"victim","revision":999,"__proto__":{"nature":"refund"}}'));
+    await execute(repository, 'A', command, 0);
+    const saved = (await repository.get('A')).state.transactions[0];
+    assert.equal(saved.nature, 'expense');
+    assert.equal(Object.hasOwn(saved, 'origin'), false);
+    assert.equal(Object.hasOwn(saved, 'ownerId'), false);
+    assert.equal(Object.hasOwn(saved, '__proto__'), false);
+    assert.equal((await repository.get('victim')).state.transactions.length, 0);
+  } finally { db.close(); }
+});
+
+test('reviewed import validates selected natures at the server boundary and persists valid ones', async () => {
+  const { db, repository } = database();
+  try {
+    const command: Command = { id:'reviewed', type:'import.commit', payload:{
+      name:'reviewed.csv', account:'Principal', locale:'br',
+      content:'data;descricao;valor\n2026-10-29;Compra;-12,34', accepted:[2],
+    } };
+    for (const natures of [null, [], {}, {'2':'unidentified'}, {'2':'invalid'}, {'2':123}, {'3':'expense'}]) {
+      await assert.rejects(execute(repository, 'A', {...command,payload:{...command.payload,natures}},0),status(400));
+      assert.equal((await repository.get('A')).revision, 0);
+    }
+    command.payload.natures = {'2':'transfer'};
+    const saved = await execute(repository, 'A', command, 0);
+    assert.equal(saved.state.transactions[0].nature, 'transfer');
+    assert.equal(saved.state.importBatches![0].transactions[0].nature, 'transfer');
+    assert.equal(JSON.parse(JSON.stringify(await repository.export('A'))).state.transactions[0].nature, 'transfer');
+    await assert.rejects(execute(repository,'victim',{id:'undo',type:'import.revert',payload:{id:'reviewed'}},0),status(400));
+  } finally { db.close(); }
+});
+
 test('imports are atomic, durable, isolated and safe on concurrent retries', async () => {
   const { db, repository } = database();
   try {

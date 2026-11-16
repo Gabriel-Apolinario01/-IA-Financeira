@@ -2,6 +2,7 @@ import { assertMoney, estimateSaving, isValidDate, isValidMonth, MAX_MONEY, MAX_
 import { CATEGORIES, type Budget, type Command, type Debt, type FinanceState, type Goal, type Movement, type Profile, type SavingAction, type Transaction } from './types';
 
 type Payload = Record<string, unknown>;
+import { validateTransactionNature } from './transaction-nature';
 const categoryIds = new Set<string>(CATEGORIES.map(category => category.id));
 function object(value: unknown, label: string): Payload {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} inválido.`);
@@ -67,8 +68,10 @@ function profileUpdate(profile: Profile, payload: Payload): Profile {
   }
   return updated;
 }
-function transaction(payload: Payload): Transaction {
+function transaction(payload: Payload, prior?: Transaction): Transaction {
+  const nature = Object.hasOwn(payload, 'nature') ? validateTransactionNature(payload.nature) : prior?.nature;
   return { id: id(payload.id), description: text(payload.description, 'Descrição'), amount: money(payload.amount, 'Valor do lançamento', false),
+    ...(nature !== undefined ? { nature: validateTransactionNature(nature) } : {}),
     type: enumeration(payload.type, ['income', 'expense'], 'Tipo do lançamento'), category: category(payload.category), date: date(payload.date, 'Data do lançamento'),
     status: enumeration(payload.status, ['planned', 'realized'], 'Situação do lançamento'), expenseKind: enumeration(payload.expenseKind, ['fixed', 'variable'], 'Classificação da despesa') };
 }
@@ -123,7 +126,7 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
     }
     case 'transaction.save': {
       if (state.transactions.some(t => t.id === payload.id && t.origin) || (typeof payload.id === 'string' && payload.id.startsWith('imp_') && state.importBatches?.some(b => b.transactions.some(t => t.id === payload.id)))) throw new Error('Lançamento importado: desfaça o lote no histórico para corrigir a fonte.');
-      const item = transaction(payload);
+      const item = transaction(payload, state.transactions.find(row => row.id === payload.id));
       if (state.debts.some(debt => debt.transactionId === item.id) && (item.type !== 'expense' || item.category !== 'dividas')) throw new Error('Este lançamento está vinculado a uma dívida. Mantenha-o como despesa de dívidas ou desfaça o vínculo antes de alterar.');
       next.transactions = replace(state.transactions, item);
       if (item.type === 'income' && item.status === 'realized' && state.profile.confirmedNoIncomeMonths.includes(item.date.slice(0, 7))) {
