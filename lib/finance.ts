@@ -107,6 +107,15 @@ export function validateRefundLinks(state: FinanceState): void {
   }
 }
 
+/** Absence is not zero. Percentages remain uncapped, including above 100%. */
+export function incomeCommitment(income: number, expenses: number, incomeKnown: boolean) {
+  return {
+    status: income > 0 ? 'positive' as const : incomeKnown ? 'zero' as const : 'unknown' as const,
+    percent: income > 0 ? expenses / income * 100 : null,
+    income, expenses,
+  };
+}
+
 export function monthMetrics(state: FinanceState, month: string) {
   if (!isValidMonth(month)) throw new Error('Mês inválido.');
   const rows = state.transactions.filter(item => item.date.slice(0, 7) === month);
@@ -131,6 +140,8 @@ export function monthMetrics(state: FinanceState, month: string) {
   return {
     income, expenses, result: safeSum([income, -expenses]), pendingIncome, pendingExpenses,
     cashIncome, cashExpenses, cashResult: safeSum([cashIncome,-cashExpenses]),
+    commitment: incomeCommitment(income, expenses, incomeConfirmed),
+    projectedCommitment: incomeCommitment(safeSum([income, pendingIncome]), safeSum([expenses, pendingExpenses]), incomeConfirmed || pendingIncome > 0),
     pendingReview: rows.filter(t => t.nature === 'unidentified' || (t.nature === 'refund' && !t.refundOf)).length,
     projection: safeSum([income, -expenses, pendingIncome, -pendingExpenses]),
     guarded, guardedAsOf, incomeConfirmed, incomplete: !incomeConfirmed, categoryExpenses, categoryPending,
