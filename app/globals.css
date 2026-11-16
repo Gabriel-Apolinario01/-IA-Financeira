@@ -50,6 +50,8 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 .import-select { display:flex; gap:8px; align-items:center; }
 .import-select input { width:18px; height:18px; accent-color:var(--green); }
 .import-status p { margin-top:8px; font-size:12px; }
+.import-suggestion { border-top:1px solid var(--border); margin-top:12px; padding-top:12px; }
+.import-suggestion .button { margin-top:10px; padding:8px; width:100%; white-space:normal; }
 .import-row-invalid { background:#fff8f3; }
 .import-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0; }
 .import-stats>div { background:#f0f4ed; padding:12px; border-radius:8px; }
