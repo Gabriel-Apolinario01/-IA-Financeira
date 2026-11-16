@@ -185,6 +185,13 @@ export function simulate({ initial, monthly, months, annualRate }: SimulationInp
   return { rows, contributed, balance, growth: balance - contributed };
 }
 
+/** Educational scenario only. Reuses the single compound-interest engine. */
+export function comparePeriodicSpending(input: SimulationInput) {
+  if (!Number.isInteger(input.months) || input.months < 1) throw new Error('Informe um prazo de 1 a 600 meses.');
+  const investment = simulate(input);
+  return { ...investment, spent: safeSum(Array.from({length: input.months}, () => input.monthly)),
+    difference: investment.growth, monthly: input.monthly };
+}
 export interface SavingSuggestion {
   id: string; month: string; category: string; baseAmount: number;
   estimatedSaving: number; reductionPercent: number; title: string; reason: string;
