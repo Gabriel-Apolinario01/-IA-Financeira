@@ -366,6 +366,9 @@ test("rate limits are atomic, separated by owner and bucket, and reset next wind
     await assert.rejects(repository.consumeRate("A", "diagnosis", 3), status(429));
     await repository.consumeRate("B", "diagnosis", 3);
     await repository.consumeRate("A", "command", 3);
+    await repository.consumeRate("A", "import-classification", 1);
+    await assert.rejects(repository.consumeRate("A", "import-classification", 1), status(429));
+    await repository.consumeRate("B", "import-classification", 1);
     time += 60_000;
     await repository.consumeRate("A", "diagnosis", 3);
   } finally { db.close(); }

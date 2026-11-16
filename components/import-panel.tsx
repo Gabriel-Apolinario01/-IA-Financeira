@@ -1,13 +1,13 @@
 "use client";
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CATEGORIES, type FinanceState, type TransactionNature } from '@/lib/types';
 import { IMPORT_LIMIT, decodeImport, parseImport, possibleMatches, confirmedImportRows, type ImportLocale } from '@/lib/imports';
 import { defaultReview, importDuplicate, reviewIssue, selectedImportTotals, type ImportReview } from '@/lib/import-review';
 import { formatMoney } from '@/lib/finance';
-import { classifyImportDescription } from '@/lib/import-classifier';
+import { classifyImportDescription, type ImportSuggestion } from '@/lib/import-classifier';
 
 const labels: Record<TransactionNature,string> = { income:'Receita', expense:'Despesa', transfer:'Transferência entre contas próprias', invoice_payment:'Pagamento de fatura', refund:'Estorno', unidentified:'Não identificado — revisar' };
-export function ImportPanel({ state, send, pending }: { state: FinanceState; send: (type: string, payload: Record<string, unknown>) => Promise<FinanceState>; pending: boolean }) {
+export function ImportPanel({ state, send, pending, allowAssistance = false }: { state: FinanceState; send: (type: string, payload: Record<string, unknown>) => Promise<FinanceState>; pending: boolean; allowAssistance?: boolean }) {
   const [file, setFile] = useState<{name:string;content:string;hash:string}|null>(null);
   const [locale, setLocale] = useState<ImportLocale>('auto');
   const [encoding, setEncoding] = useState<'utf-8'|'windows-1252'>('utf-8');
@@ -16,9 +16,14 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
   const [message, setMessage] = useState('');
   const [reading, setReading] = useState(false);
   const [reviews, setReviews] = useState<Record<number,ImportReview>>({});
+  const [descriptionConsent,setDescriptionConsent]=useState(false);
+  const [assisting,setAssisting]=useState(false);
+  const [assistanceNotice,setAssistanceNotice]=useState('');
+  const [assistedSuggestions,setAssistedSuggestions]=useState<Record<number,Omit<ImportSuggestion,'method'> & {method:'local_rules'|'model'}>>({});
+  const classificationRequest=useRef(0);
   let parsed: ReturnType<typeof parseImport>|undefined; let parseError='';
   if(file) {try {parsed=parseImport(file.name,file.content,locale);} catch(error) {parseError=(error as Error).message;}}
-  function resetReview() {setAccepted([]);setReviews({});setMessage('');}
+  function resetReview() {classificationRequest.current++;setAccepted([]);setReviews({});setMessage('');setAssistedSuggestions({});setAssistanceNotice('');setDescriptionConsent(false);}
   async function load(upload?: File) {
     if(!upload || reading || pending) return;
     setReading(true);setFile(null);resetReview();
@@ -42,6 +47,21 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
   const duplicates=entries.filter(e=>e.duplicate==='exact').length;
   const awaiting=entries.filter(e=>!e.row.error && !e.duplicate && e.issue).length;
   const selectedBlocked=entries.some(e=>accepted.includes(e.row.line) && !e.ready);
+  const assistanceRows=entries.filter(e=>!e.row.error && !e.duplicate && e.issue).slice(0,10).map(({row,review})=>({line:row.line,description:review.description,direction:row.amount<0?'expense':'income'}));
+  async function requestAssistance() {
+    if(!allowAssistance || !descriptionConsent || assisting || !assistanceRows.length) return;
+    const request=++classificationRequest.current;
+    setAssisting(true);setAssistanceNotice('');setDescriptionConsent(false);
+    try {
+      const response=await fetch('/api/import-classification',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:assistanceRows,consent:true}),signal:AbortSignal.timeout(10000)});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.error || 'Serviço indisponível. As regras locais continuam disponíveis.');
+      if(request!==classificationRequest.current) return;
+      setAssistedSuggestions(Object.fromEntries(result.suggestions.map((entry: {line:number;suggestion:ImportSuggestion})=>[entry.line,entry.suggestion])));
+      setAssistanceNotice(result.notice);
+    } catch(error) {if(request===classificationRequest.current) setAssistanceNotice(`${error instanceof Error?error.message:'Serviço indisponível.'} As sugestões locais permanecem disponíveis.`);}
+    finally {setAssisting(false);}
+  }
   async function commit() {
     if(!file || !accepted.length || selectedBlocked || totals.error) return;
     try {
@@ -74,6 +94,7 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
       <h3>Prévia: {file?.name}</h3>
       <p className="fine-print">Nenhuma sugestão ou linha é confirmada automaticamente. Use o mesmo apelido para a mesma conta. Em caso de número ambíguo, escolha o formato acima; não misture convenções no mesmo arquivo.</p>
       <p className="fine-print">Sugestões por regras locais, sem IA generativa e sem envio de descrições. Aplicar uma sugestão preenche os campos; selecionar e confirmar continuam sendo ações suas.</p>
+      {allowAssistance && <details className="import-assistance"><summary>Classificação assistida por IA (opcional)</summary><p>Quando o serviço estiver habilitado, somente até 10 descrições pendentes e suas direções de caixa serão enviadas à OpenAI. Não enviamos arquivo completo, valores, datas, apelido da conta ou perfil. Identificadores reconhecíveis são removidos, mas confira as descrições antes de autorizar. Falhas preservam as regras locais.</p><ul>{assistanceRows.map(row=><li key={row.line}>Linha {row.line}: {row.description} · {row.direction==='expense'?'saída':'entrada'}</li>)}</ul><label className="checkbox"><input type="checkbox" checked={descriptionConsent} disabled={assisting} onChange={e=>setDescriptionConsent(e.target.checked)} /><span>Autorizo o envio destas descrições à OpenAI somente nesta solicitação.</span></label><button className="button secondary" disabled={!descriptionConsent || assisting || pending || !assistanceRows.length} onClick={()=>void requestAssistance()}>{assisting?'Solicitando…':'Solicitar sugestões de IA'}</button>{assistanceNotice && <p role="status">{assistanceNotice}</p>}</details>}
       <dl className="import-stats" aria-label="Resumo da importação">
         {[["Encontradas",entries.length],["Válidas",entries.length-invalid],["Inválidas",invalid],["Duplicadas exatas",duplicates],["Pendentes de revisão",awaiting],["Selecionadas",accepted.length]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       </dl>
@@ -81,8 +102,8 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
       <div className="import-actions"><button className="button secondary" disabled={pending || !entries.some(e=>e.ready)} onClick={()=>setAccepted(entries.filter(e=>e.ready).map(e=>e.row.line))}>Selecionar válidas e revisadas</button><button className="button secondary" disabled={pending || !accepted.length} onClick={()=>setAccepted([])}>Desmarcar todas</button></div>
       <div className="import-table"><table><caption className="sr-only">Revisão das movimentações do extrato</caption><thead><tr>{['Seleção','Data','Descrição','Valor e direção','Natureza','Categoria','Status de revisão'].map(label=><th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{entries.map(({row,review,duplicate,issue,ready})=>{
         const matches=row.error?[]:possibleMatches(row,state.transactions);
-        const update=(patch: Partial<ImportReview>)=>setReviews(previous=>({...previous,[row.line]:{...review,...patch}}));
-        const suggestion=classifyImportDescription(review.description,row.error?0:row.amount);
+        const update=(patch: Partial<ImportReview>)=>{classificationRequest.current++;setDescriptionConsent(false);if(patch.description!==undefined) {setAssistedSuggestions(previous=>{const next={...previous};delete next[row.line];return next;});}setReviews(previous=>({...previous,[row.line]:{...review,...patch}}));};
+        const suggestion=assistedSuggestions[row.line] ?? classifyImportDescription(review.description,row.error?0:row.amount);
         return <tr key={row.line} className={row.error?'import-row-invalid':''}>
           <td data-label="Seleção"><label className="import-select"><input aria-label={`Confirmar linha ${row.line}`} type="checkbox" disabled={pending || (!ready && !accepted.includes(row.line))} checked={accepted.includes(row.line)} onChange={e=>setAccepted(e.target.checked?[...accepted,row.line]:accepted.filter(n=>n!==row.line))} />Linha {row.line}</label></td>
           <td data-label="Data">{row.date || 'Não informada'}</td>
@@ -91,7 +112,7 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
           <td data-label="Natureza"><select aria-label={`Natureza linha ${row.line}`} disabled={pending || !!row.error || duplicate==='exact'} value={review.nature} onChange={e=>update({nature:e.target.value as TransactionNature,refundOf:undefined})}>{Object.entries(labels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>{review.nature==='refund' && <label className="import-refund">Lançamento original<select aria-label={`Original linha ${row.line}`} value={review.refundOf ?? ''} disabled={pending} onChange={e=>update({refundOf:e.target.value})}><option value="">Selecione o vínculo</option>{state.transactions.filter(t=>['income','expense'].includes(t.nature ?? t.type) && t.status==='realized' && t.date.slice(0,7)===row.date.slice(0,7) && t.type!==(row.amount<0?'expense':'income') && t.date<=row.date).map(t=><option key={t.id} value={t.id}>{t.description} · {formatMoney(t.amount)}</option>)}</select></label>}</td>
           <td data-label="Categoria"><select aria-label={`Categoria linha ${row.line}`} disabled={pending || !!row.error || duplicate==='exact' || ['transfer','invoice_payment','refund'].includes(review.nature)} value={review.category} onChange={e=>update({category:e.target.value})}>{CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>{review.nature==='refund' && <small>A categoria do original prevalece.</small>}</td>
           <td data-label="Status de revisão" className="import-status"><strong>{duplicate==='exact'?'Já importada':row.error?'Inválida':issue?'Revisão pendente':accepted.includes(row.line)?'Selecionada':'Revisada'}</strong><p>{duplicate==='exact'?'Duplicação exata nesta conta, inclusive lotes desfeitos. Consulte o histórico.':issue || (['transfer','invoice_payment'].includes(review.nature)?'Somente caixa; não cria consumo.':'Pronta para seleção; confira os dados.')}</p>{matches.length>0 && duplicate!=='exact' && <p>Possível duplicação: {matches.length} registro(s) com valor e data próximos. Não é uma duplicação comprovada.</p>}
-            {!row.error && !duplicate && <div className="import-suggestion"><small>Sugestão local · revisão necessária</small><p>{suggestion.category && <strong>{CATEGORIES.find(c=>c.id===suggestion.category)?.label} · </strong>}{labels[suggestion.nature]}</p><p>{suggestion.reason}</p>{(suggestion.category || suggestion.nature!=='unidentified') && <button className="button secondary" disabled={pending} aria-label={`Aplicar sugestão linha ${row.line}`} onClick={()=>update({nature:suggestion.nature,category:suggestion.category ?? 'outros',refundOf:undefined})}>Aplicar sugestão</button>}</div>}
+            {!row.error && !duplicate && <div className="import-suggestion"><small>{suggestion.method==='model'?'Sugestão de IA':'Sugestão local'} · revisão necessária</small><p>{suggestion.category && <strong>{CATEGORIES.find(c=>c.id===suggestion.category)?.label} · </strong>}{labels[suggestion.nature]}</p><p>{suggestion.reason}</p>{(suggestion.category || suggestion.nature!=='unidentified') && <button className="button secondary" disabled={pending} aria-label={`Aplicar sugestão linha ${row.line}`} onClick={()=>update({nature:suggestion.nature,category:suggestion.category ?? 'outros',refundOf:undefined})}>Aplicar sugestão</button>}</div>}
           </td>
         </tr>;
       })}</tbody></table></div>
