@@ -9,7 +9,12 @@ export interface Profile {
   aiConsent: boolean;
   confirmedNoIncomeMonths: string[];
 }
+/** Financial nature; separate from the existing cash direction in `type`. */
+export type TransactionNature = 'income' | 'expense' | 'transfer' | 'invoice_payment' | 'refund' | 'unidentified';
+
 export interface Transaction {
+  /** Optional for legacy records. Classification validation and accounting follow in a later increment. */
+  nature?: TransactionNature;
   origin?: { batchId: string; line: number; externalId?: string; account: string; currency: 'BRL'; timezone: 'America/Sao_Paulo'; originalDescription: string };
   id: string; description: string; amount: number;
   type: 'income' | 'expense'; category: string; date: string;
