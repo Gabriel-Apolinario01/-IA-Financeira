@@ -28,6 +28,49 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 .import-panel details { padding:12px 0; border-bottom:1px solid #ddd; }
 .import-panel summary { cursor:pointer; }
 .import-hash { overflow-wrap:anywhere; }
+.import-panel { min-width:0; display:grid; gap:16px; }
+.import-panel .import-controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.import-controls label { min-width:0; }
+.import-controls input,.import-controls select,.import-table select,.import-table textarea { width:100%; min-width:0; padding:10px; border:1px solid var(--border); border-radius:7px; background:var(--paper); color:var(--ink); font-size:14px; }
+.import-table textarea { resize:vertical; line-height:1.5; min-height:90px; }
+.import-table select { min-height:44px; }
+.import-panel .import-table { margin:0; border:1px solid var(--border); border-radius:10px; }
+.import-table table { table-layout:fixed; min-width:1100px; font-size:13px; }
+.import-table th { background:#f0f4ed; }
+.import-table th:nth-child(1) { width:95px; }
+.import-table th:nth-child(2) { width:105px; }
+.import-table th:nth-child(3) { width:210px; }
+.import-table th:nth-child(4) { width:135px; }
+.import-table th:nth-child(5) { width:195px; }
+.import-table th:nth-child(6) { width:165px; }
+.import-table th:nth-child(7) { width:195px; }
+.import-table td { vertical-align:top; overflow-wrap:anywhere; }
+.import-table small,.import-amount strong { display:block; }
+.import-table .import-refund { display:grid; gap:8px; margin-top:12px; }
+.import-select { display:flex; gap:8px; align-items:center; }
+.import-select input { width:18px; height:18px; accent-color:var(--green); }
+.import-status p { margin-top:8px; font-size:12px; }
+.import-row-invalid { background:#fff8f3; }
+.import-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0; }
+.import-stats>div { background:#f0f4ed; padding:12px; border-radius:8px; }
+.import-stats dt { font-size:12px; }
+.import-stats dd { margin:4px 0 0; font-size:21px; font-weight:600; }
+.import-selected.notice { display:grid; gap:8px; margin:0; }
+.import-actions { display:flex; flex-wrap:wrap; gap:10px; }
+@media(max-width:700px){
+ .import-panel .import-controls { grid-template-columns:1fr; }
+ .import-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
+ .import-panel .import-table { border:0; overflow:visible; }
+ .import-table table,.import-table tbody { display:block; min-width:0; width:100%; }
+ .import-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+ .import-table tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+ .import-table td { display:block; border:0; padding:0; min-width:0; }
+ .import-table td::before { content:attr(data-label); display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; }
+ .import-table .import-description,.import-table .import-status,.import-table td[data-label="Natureza"],.import-table td[data-label="Categoria"] { grid-column:1 / -1; }
+ .import-table .import-amount { grid-column:1 / -1; }
+ .import-table textarea { min-height:80px; }
+ .import-actions .button { flex:1 1 180px; }
+}
 .educational-comparison form { display:grid; gap:16px; margin:20px 0; }
 .educational-comparison figure { margin:24px 0; }
 .educational-comparison .comparison-strip { display:grid; gap:18px; }

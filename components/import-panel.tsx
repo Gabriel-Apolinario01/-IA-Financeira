@@ -1,85 +1,100 @@
 "use client";
 import { useState } from 'react';
 import { CATEGORIES, type FinanceState, type TransactionNature } from '@/lib/types';
-import { IMPORT_LIMIT, parseImport, possibleMatches, confirmedImportRows } from '@/lib/imports';
+import { IMPORT_LIMIT, decodeImport, parseImport, possibleMatches, confirmedImportRows, type ImportLocale } from '@/lib/imports';
+import { defaultReview, importDuplicate, reviewIssue, selectedImportTotals, type ImportReview } from '@/lib/import-review';
 import { formatMoney } from '@/lib/finance';
-type Review = { nature: TransactionNature; description: string; category: string; refundOf?: string };
-const labels: Record<TransactionNature,string> = { income:'Receita', expense:'Despesa', transfer:'Transferência entre contas próprias', invoice_payment:'Pagamento de fatura', refund:'Estorno', unidentified:'Não identificado — revisar' };
 
+const labels: Record<TransactionNature,string> = { income:'Receita', expense:'Despesa', transfer:'Transferência entre contas próprias', invoice_payment:'Pagamento de fatura', refund:'Estorno', unidentified:'Não identificado — revisar' };
 export function ImportPanel({ state, send, pending }: { state: FinanceState; send: (type: string, payload: Record<string, unknown>) => Promise<FinanceState>; pending: boolean }) {
-  const [file, setFile] = useState<{ name: string; content: string } | null>(null);
-  const [locale, setLocale] = useState<'br' | 'us'>('br');
+  const [file, setFile] = useState<{name:string;content:string;hash:string}|null>(null);
+  const [locale, setLocale] = useState<ImportLocale>('auto');
+  const [encoding, setEncoding] = useState<'utf-8'|'windows-1252'>('utf-8');
   const [account, setAccount] = useState('');
   const [accepted, setAccepted] = useState<number[]>([]);
   const [message, setMessage] = useState('');
   const [reading, setReading] = useState(false);
-  const [reviews, setReviews] = useState<Record<number,Review>>({});
-  let parsed: ReturnType<typeof parseImport> | undefined; let parseError = '';
-  if (file) { try { parsed = parseImport(file.name, file.content, locale); } catch (e) { parseError = (e as Error).message; } }
+  const [reviews, setReviews] = useState<Record<number,ImportReview>>({});
+  let parsed: ReturnType<typeof parseImport>|undefined; let parseError='';
+  if(file) {try {parsed=parseImport(file.name,file.content,locale);} catch(error) {parseError=(error as Error).message;}}
+  function resetReview() {setAccepted([]);setReviews({});setMessage('');}
   async function load(upload?: File) {
-    if (!upload || reading || pending) return;
-    setReading(true); setFile(null); setAccepted([]); setReviews({}); setMessage('');
+    if(!upload || reading || pending) return;
+    setReading(true);setFile(null);resetReview();
     try {
-      if (upload.size > IMPORT_LIMIT) throw new Error('O limite é 100 KB por arquivo.');
-      if (upload.type && !['text/csv', 'text/tab-separated-values', 'text/plain', 'application/x-ofx', 'application/vnd.intu.qfx', 'application/octet-stream', 'application/vnd.ms-excel'].includes(upload.type)) throw new Error('Tipo de arquivo incompatível.');
-      const bytes = await upload.arrayBuffer(); let content: string;
-      try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { content = new TextDecoder('windows-1252').decode(bytes); }
-      setFile({ name: upload.name, content });
-    } catch (e) { setMessage((e as Error).message); }
-    finally { setReading(false); }
+      if(upload.size>IMPORT_LIMIT) throw new Error('O limite é 100 KB por arquivo.');
+      if(upload.type && !['text/csv','text/tab-separated-values','text/plain','application/x-ofx','application/vnd.intu.qfx','application/octet-stream','application/vnd.ms-excel'].includes(upload.type)) throw new Error('Tipo de arquivo incompatível.');
+      const content=decodeImport(await upload.arrayBuffer(),encoding);
+      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(content));
+      const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+      setFile({name:upload.name,content,hash});
+    } catch(error) {setMessage((error as Error).message);} finally {setReading(false);}
   }
+  const entries=(parsed?.rows ?? []).map(row=>{
+    const review=reviews[row.line] ?? defaultReview(row);
+    const duplicate=file && parsed ? importDuplicate(row,state.importBatches ?? [],account.trim(),parsed.source,file.hash) : null;
+    const issue=duplicate==='conflict'?'Identificador externo já recebido com valor ou data diferente. Revise a origem.':reviewIssue(row,review);
+    return {row,review,duplicate,issue,ready:!issue && duplicate!=='exact'};
+  });
+  const totals=selectedImportTotals(state,parsed?.rows ?? [],reviews,accepted);
+  const invalid=entries.filter(e=>e.row.error || e.duplicate==='conflict').length;
+  const duplicates=entries.filter(e=>e.duplicate==='exact').length;
+  const awaiting=entries.filter(e=>!e.row.error && !e.duplicate && e.issue).length;
+  const selectedBlocked=entries.some(e=>accepted.includes(e.row.line) && !e.ready);
   async function commit() {
-    if (!file) return;
+    if(!file || !accepted.length || selectedBlocked || totals.error) return;
     try {
-      const natures = Object.fromEntries(accepted.map(line => [line,reviews[line]?.nature ?? 'unidentified']));
-      const edits = Object.fromEntries(accepted.map(line => { const { description,category,refundOf } = reviews[line]; return [line,{description,category,...(refundOf ? {refundOf} : {})}]; }));
-      const next = await send('import.commit', { ...file, account: account.trim(), locale, accepted, natures, edits });
-      const batch = next.importBatches!.at(-1)!;
+      const natures=Object.fromEntries(accepted.map(line=>[line,reviews[line]?.nature ?? 'unidentified']));
+      const edits=Object.fromEntries(accepted.map(line=>{const {description,category,refundOf}=reviews[line];return [line,{description,category,...(refundOf?{refundOf}:{})}];}));
+      // Client hashes and suggestions are never trusted or sent as editable provenance.
+      const next=await send('import.commit',{name:file.name,content:file.content,account:account.trim(),locale,accepted,natures,edits});
+      const batch=next.importBatches!.at(-1)!;
       setMessage(`${batch.transactions.length} importados; ${batch.duplicates} duplicados exatos; ${batch.ignored} ignorados; ${batch.errors} com erro.`);
-      setFile(null); setAccepted([]);
-    } catch (e) { setMessage((e as Error).message); }
+      setFile(null);setAccepted([]);setReviews({});
+    } catch(error) {setMessage((error as Error).message);}
   }
-  async function change(type: string, id: string) {
-    try { await send(type, { id }); setMessage(type === 'import.revert' ? 'Lote desfeito. A origem foi preservada.' : 'Lote restaurado.'); }
-    catch (e) { setMessage((e as Error).message); }
+  async function change(type: string,id: string) {
+    try {await send(type,{id});setMessage(type==='import.revert'?'Lote desfeito. A origem foi preservada.':'Lote restaurado.');setAccepted([]);}
+    catch(error) {setMessage((error as Error).message);}
   }
-  return <section className="card import-panel">
-    <h2>Importar extrato</h2>
-    <p>CSV, TSV ou OFX em reais · até 100 KB e 300 linhas. Confira cada lançamento antes de confirmar.</p>
-    <p className="fine-print">CSV: cabeçalhos data, descricao, valor. O sinal informa entrada ou saída de caixa. Classifique cada linha selecionada: transferência e pagamento de fatura não geram novo consumo. Para faturas, verifique se as compras estão registradas; o aplicativo não comprova isso.</p>
+  return <section className="card import-panel" aria-labelledby="import-heading">
+    <h2 id="import-heading">Importar extrato</h2>
+    <p>CSV, TSV ou OFX em reais · até 100 KB e 300 linhas. Revise os lançamentos antes de confirmar.</p>
+    <p className="fine-print">Cabeçalhos: data, descrição e valor; ou débito e crédito separados. Saldos e totais não são lançamentos. Transferências e pagamentos de fatura não geram novo consumo. Confira se as compras da fatura estão cadastradas.</p>
     <div className="import-controls">
-      <label>Apelido da conta<input value={account} maxLength={60} onChange={e => setAccount(e.target.value)} placeholder="Ex.: Conta principal" disabled={pending} /></label>
-      <label>Formato numérico do CSV<select value={locale} disabled={pending} onChange={e => { setLocale(e.target.value as 'br' | 'us'); setAccepted([]); setReviews({}); }}><option value="br">Brasil: 1.234,56</option><option value="us">Internacional: 1,234.56</option></select></label>
+      <label>Apelido da conta<input value={account} maxLength={60} disabled={pending || reading} placeholder="Ex.: Conta principal" onChange={e=>{setAccount(e.target.value);setAccepted([]);}} /></label>
+      <label>Formato numérico do CSV<select value={locale} disabled={pending || reading} onChange={e=>{setLocale(e.target.value as ImportLocale);resetReview();}}><option value="auto">Detectar · confirmar ambiguidades</option><option value="br">Brasil: 1.234,56</option><option value="us">Internacional: 1,234.56</option></select></label>
+      <label>Codificação do arquivo<select value={encoding} disabled={pending || reading} onChange={e=>{setEncoding(e.target.value as typeof encoding);setFile(null);resetReview();}}><option value="utf-8">UTF-8</option><option value="windows-1252">Windows-1252 (sistemas antigos)</option></select></label>
     </div>
-    <div className="import-drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void load(e.dataTransfer.files[0]); }}>
-      <label>Arraste um arquivo ou selecione<input type="file" accept=".csv,.tsv,.ofx" disabled={pending || reading} onChange={e => { void load(e.target.files?.[0]); e.target.value = ''; }} /></label>
-    </div>
+    <div className="import-drop" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();void load(e.dataTransfer.files[0]);}}><label>Selecione ou arraste um extrato<input type="file" accept=".csv,.tsv,.ofx" disabled={pending || reading} onChange={e=>{void load(e.target.files?.[0]);e.target.value='';}} /></label>{reading && <p role="status">Lendo arquivo…</p>}</div>
     {message && <p role="status" className="notice">{message}</p>}
     {parseError && <p role="alert" className="notice warning">{parseError}</p>}
-    {parsed && <><h3>Prévia: {file?.name}</h3><p>Nenhuma linha é selecionada automaticamente. Valores e datas próximos são apenas candidatos à revisão. Use sempre o mesmo apelido para a mesma conta.</p>
-      <div className="import-table"><table><thead><tr><th>Confirmar</th><th>Data</th><th>Descrição</th><th>Valor</th><th>Revisão</th></tr></thead><tbody>{parsed.rows.map(row => {
-        const matches = possibleMatches(row, state.transactions);
-        const review = reviews[row.line] ?? { nature:'unidentified', description:row.description, category:'outros' };
-        const update = (patch: Partial<Review>) => setReviews(previous => ({...previous,[row.line]:{...review,...patch}}));
-        return <tr key={row.line}><td><input aria-label={`Confirmar linha ${row.line}`} type="checkbox" disabled={pending || !!row.error} checked={accepted.includes(row.line)} onChange={e => setAccepted(e.target.checked ? [...accepted, row.line] : accepted.filter(n => n !== row.line))} /></td><td>{row.date}</td><td><input aria-label={`Descrição linha ${row.line}`} disabled={pending || !!row.error} maxLength={160} value={review.description} onChange={e=>update({description:e.target.value})}/></td><td>{row.error ? '—' : <>{formatMoney(row.amount)}<br/>{row.amount<0?'Saída de caixa':'Entrada de caixa'}</>}</td><td>
-          <label>Natureza<select aria-label={`Natureza linha ${row.line}`} disabled={pending || !!row.error} value={review.nature} onChange={e=>update({nature:e.target.value as TransactionNature,refundOf:undefined})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
-          <label>Categoria<select aria-label={`Categoria linha ${row.line}`} disabled={pending || !!row.error} value={review.category} onChange={e=>update({category:e.target.value})}>{CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
-          {review.nature==='refund' && <label>Lançamento original<select aria-label={`Original linha ${row.line}`} value={review.refundOf ?? ''} onChange={e=>update({refundOf:e.target.value})} disabled={pending}><option value="">Selecione um vínculo confirmado</option>{state.transactions.filter(t=>['income','expense'].includes(t.nature ?? t.type) && t.status==='realized' && t.date.slice(0,7)===row.date.slice(0,7) && t.type !== (row.amount<0?'expense':'income') && t.date<=row.date).map(t=><option key={t.id} value={t.id}>{t.description} · {formatMoney(t.amount)}</option>)}</select></label>}
-          <p>{row.error || (review.nature==='unidentified'?'Movimentação precisa de revisão.':review.nature==='transfer'||review.nature==='invoice_payment'?'Somente fluxo de caixa; não altera o consumo.':review.nature==='refund'?'Compensa o original confirmado no mesmo mês. Categoria do original prevalece.':'Afeta o orçamento após confirmação.')}</p>
-          {!!matches.length && <p>Possível duplicação: {matches.length} lançamento(s) próximos. Confira antes de selecionar.</p>}
-        </td></tr>;
+    {parsed && <>
+      <h3>Prévia: {file?.name}</h3>
+      <p className="fine-print">Nenhuma sugestão ou linha é confirmada automaticamente. Use o mesmo apelido para a mesma conta. Em caso de número ambíguo, escolha o formato acima; não misture convenções no mesmo arquivo.</p>
+      <dl className="import-stats" aria-label="Resumo da importação">
+        {[["Encontradas",entries.length],["Válidas",entries.length-invalid],["Inválidas",invalid],["Duplicadas exatas",duplicates],["Pendentes de revisão",awaiting],["Selecionadas",accepted.length]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      </dl>
+      <div className="notice import-selected" aria-live="polite"><p>Receitas reconhecidas selecionadas: <strong>{totals.income===null?'Indisponível':formatMoney(totals.income)}</strong></p><p>Consumo líquido selecionado: <strong>{totals.expenses===null?'Indisponível':formatMoney(totals.expenses)}</strong></p><small>Estornos vinculados compensam os originais. Transferências e faturas afetam apenas o caixa.</small>{totals.error && <p>{totals.error}</p>}</div>
+      <div className="import-actions"><button className="button secondary" disabled={pending || !entries.some(e=>e.ready)} onClick={()=>setAccepted(entries.filter(e=>e.ready).map(e=>e.row.line))}>Selecionar válidas e revisadas</button><button className="button secondary" disabled={pending || !accepted.length} onClick={()=>setAccepted([])}>Desmarcar todas</button></div>
+      <div className="import-table"><table><caption className="sr-only">Revisão das movimentações do extrato</caption><thead><tr>{['Seleção','Data','Descrição','Valor e direção','Natureza','Categoria','Status de revisão'].map(label=><th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{entries.map(({row,review,duplicate,issue,ready})=>{
+        const matches=row.error?[]:possibleMatches(row,state.transactions);
+        const update=(patch: Partial<ImportReview>)=>setReviews(previous=>({...previous,[row.line]:{...review,...patch}}));
+        return <tr key={row.line} className={row.error?'import-row-invalid':''}>
+          <td data-label="Seleção"><label className="import-select"><input aria-label={`Confirmar linha ${row.line}`} type="checkbox" disabled={pending || (!ready && !accepted.includes(row.line))} checked={accepted.includes(row.line)} onChange={e=>setAccepted(e.target.checked?[...accepted,row.line]:accepted.filter(n=>n!==row.line))} />Linha {row.line}</label></td>
+          <td data-label="Data">{row.date || 'Não informada'}</td>
+          <td data-label="Descrição" className="import-description"><textarea aria-label={`Descrição linha ${row.line}`} rows={3} maxLength={160} disabled={pending || !!row.error || duplicate==='exact'} value={review.description} onChange={e=>update({description:e.target.value})} />{review.description!==row.description && <details><summary>Descrição original</summary><p>{row.description}</p></details>}</td>
+          <td data-label="Valor e direção" className="import-amount"><strong>{row.error?'—':formatMoney(row.amount)}</strong>{!row.error && <small>{row.amount<0?'Saída de caixa':'Entrada de caixa'}</small>}</td>
+          <td data-label="Natureza"><select aria-label={`Natureza linha ${row.line}`} disabled={pending || !!row.error || duplicate==='exact'} value={review.nature} onChange={e=>update({nature:e.target.value as TransactionNature,refundOf:undefined})}>{Object.entries(labels).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>{review.nature==='refund' && <label className="import-refund">Lançamento original<select aria-label={`Original linha ${row.line}`} value={review.refundOf ?? ''} disabled={pending} onChange={e=>update({refundOf:e.target.value})}><option value="">Selecione o vínculo</option>{state.transactions.filter(t=>['income','expense'].includes(t.nature ?? t.type) && t.status==='realized' && t.date.slice(0,7)===row.date.slice(0,7) && t.type!==(row.amount<0?'expense':'income') && t.date<=row.date).map(t=><option key={t.id} value={t.id}>{t.description} · {formatMoney(t.amount)}</option>)}</select></label>}</td>
+          <td data-label="Categoria"><select aria-label={`Categoria linha ${row.line}`} disabled={pending || !!row.error || duplicate==='exact' || ['transfer','invoice_payment','refund'].includes(review.nature)} value={review.category} onChange={e=>update({category:e.target.value})}>{CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>{review.nature==='refund' && <small>A categoria do original prevalece.</small>}</td>
+          <td data-label="Status de revisão" className="import-status"><strong>{duplicate==='exact'?'Já importada':row.error?'Inválida':issue?'Revisão pendente':accepted.includes(row.line)?'Selecionada':'Revisada'}</strong><p>{duplicate==='exact'?'Duplicação exata nesta conta, inclusive lotes desfeitos. Consulte o histórico.':issue || (['transfer','invoice_payment'].includes(review.nature)?'Somente caixa; não cria consumo.':'Pronta para seleção; confira os dados.')}</p>{matches.length>0 && duplicate!=='exact' && <p>Possível duplicação: {matches.length} registro(s) com valor e data próximos. Não é uma duplicação comprovada.</p>}</td>
+        </tr>;
       })}</tbody></table></div>
-      <button className="button primary" disabled={pending || !account.trim() || !accepted.length || accepted.some(line=>!reviews[line] || reviews[line].nature==='unidentified' || !reviews[line].description.trim() || (reviews[line].nature==='refund' && !reviews[line].refundOf))} onClick={() => void commit()}>{pending ? 'Salvando…' : `Confirmar ${accepted.length} linhas`}</button> <button className="button secondary" disabled={pending} onClick={() => { setFile(null); setAccepted([]); }}>Cancelar</button>
+      <div className="import-actions"><button className="button primary" disabled={pending || !account.trim() || !accepted.length || selectedBlocked || !!totals.error} onClick={()=>void commit()}>{pending?'Salvando…':`Confirmar ${accepted.length} linhas`}</button><button className="button secondary" disabled={pending} onClick={()=>{setFile(null);resetReview();}}>Cancelar</button></div>
     </>}
     <h3>Histórico e origem dos lançamentos</h3>
-    {!(state.importBatches?.length) && <p>Nenhum arquivo importado.</p>}
-    {state.importBatches?.slice().reverse().map(batch => <details key={batch.id}><summary>{batch.name} · {batch.account} · {batch.transactions.length} lançamentos · {batch.status === 'confirmed' ? 'Confirmado' : 'Desfeito'}</summary>
-      <p>{batch.duplicates} duplicados; {batch.ignored} ignorados; {batch.errors} erros. Origem: {batch.source.toUpperCase()} · BRL · America/Sao_Paulo</p><p className="import-hash">SHA-256: {batch.hash}</p>
-      <ul>{confirmedImportRows(batch).map(row => <li key={row.line}>Linha {row.line}: {row.date} · {row.description} · {formatMoney(row.amount)}</li>)}</ul>
-      <ul>{batch.transactions.map(t=><li key={t.id}>{t.description} · {t.nature ? labels[t.nature] : 'Classificação legada'} · {CATEGORIES.find(c=>c.id===t.category)?.label}</li>)}</ul>
-      <p>{batch.audit.map(a => `${a.at}: ${a.action === 'confirmed' ? 'confirmado' : 'desfeito'}`).join(' / ')}</p>
-      <button className="button secondary" disabled={pending} onClick={() => void change(batch.status === 'confirmed' ? 'import.revert' : 'import.restore', batch.id)}>{batch.status === 'confirmed' ? 'Desfazer lote' : 'Restaurar lote'}</button>
-    </details>)}
-    <p className="fine-print">Pendente de implementação/configuração: Open Finance, PDF/OCR, notas fiscais, Gmail, XLSX e conciliação entre fontes. Nenhuma conexão bancária é necessária para importar CSV/OFX.</p>
+    {!state.importBatches?.length && <p>Nenhum arquivo importado.</p>}
+    {state.importBatches?.slice().reverse().map(batch=><details key={batch.id}><summary>{batch.name} · {batch.account} · {batch.transactions.length} lançamentos · {batch.status==='confirmed'?'Confirmado':'Desfeito'}</summary><p>{batch.duplicates} duplicados; {batch.ignored} ignorados; {batch.errors} erros. Origem: {batch.source.toUpperCase()} · BRL · America/Sao_Paulo</p><p className="import-hash">SHA-256: {batch.hash}</p><ul>{confirmedImportRows(batch).map(row=><li key={row.line}>Linha {row.line}: {row.date} · {row.description} · {formatMoney(row.amount)}</li>)}</ul><ul>{batch.transactions.map(t=><li key={t.id}>{t.description} · {t.nature?labels[t.nature]:'Classificação legada'} · {CATEGORIES.find(c=>c.id===t.category)?.label}</li>)}</ul><p>{batch.audit.map(a=>`${a.at}: ${a.action==='confirmed'?'confirmado':'desfeito'}`).join(' / ')}</p><button className="button secondary" disabled={pending} onClick={()=>void change(batch.status==='confirmed'?'import.revert':'import.restore',batch.id)}>{batch.status==='confirmed'?'Desfazer lote':'Restaurar lote'}</button></details>)}
+    <p className="fine-print">Sem conexão bancária. PDF/OCR, Open Finance e conciliação entre fontes ainda não estão disponíveis.</p>
   </section>;
 }
