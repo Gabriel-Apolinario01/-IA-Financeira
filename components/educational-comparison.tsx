@@ -19,7 +19,7 @@ export function EducationalComparison({ recorded, month, hasRecords }: { recorde
   }
   const maximum = result ? Math.max(result.spent, result.contributed, result.balance, 1) : 1;
   return <section className="card educational-comparison" aria-labelledby="educational-heading">
-    <span className="eyebrow">US13 · COMPARAÇÃO EDUCATIVA</span>
+    <span className="eyebrow">COMPARAÇÃO EDUCATIVA</span>
     <h2 id="educational-heading">Gasto hipotético ou aporte mensal</h2>
     <p>Compare um gasto mensal hipotético com apostas com a aplicação do mesmo valor. Não calculamos retornos de apostas.</p>
     <form onSubmit={calculate}>

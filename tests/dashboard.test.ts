@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { emptyState } from '../lib/demo';
 import { applyCommand } from '../lib/commands';
 import { executeFinanceCommand } from '../lib/imports';
-import { bettingSummary, monthMetrics } from '../lib/finance';
+import { bettingSummary, comparePeriodicSpending, monthMetrics } from '../lib/finance';
+import { answerEducation } from '../lib/education';
 import type { FinanceState, Transaction } from '../lib/types';
 
 const month = '2026-11';
@@ -85,4 +86,38 @@ test('reviewed betting category persists, is not inferred, and cannot duplicate 
   assert.equal(bettingSummary(JSON.parse(JSON.stringify(state)),month).amount,10000);
   assert.equal(monthMetrics(state,month).expenses,10000);
   await assert.rejects(executeFinanceCommand(state,{id:'replay',type:'import.commit',payload}));
+});
+
+test('dashboard, categories, commitment and diagnosis reconcile across manual and reviewed records', async () => {
+  let state=save(emptyState(),tx('income',300000,{type:'income'}));
+  state=save(state,tx('base',270000));
+  assert.equal(monthMetrics(state,month).result,30000);
+  state=save(state,tx('extra',1234,{category:'apostas'}));
+  assert.equal(monthMetrics(state,month).result,28766);
+  state=save(state,tx('extra',1234,{category:'lazer'}));
+  const payload={name:'integrado.csv',content:'data;descricao;valor\n2026-11-16;Compra;-200,00\n2026-11-16;Fatura;-200,00\n2026-11-16;Transferencia;-800,00',account:'Teste',locale:'br',accepted:[2,3,4],natures:{'2':'expense','3':'invoice_payment','4':'transfer'},edits:{'2':{category:'apostas'}}};
+  state=await executeFinanceCommand(state,{id:'imported',type:'import.commit',payload});
+  const purchase=state.transactions.find(t=>t.description==='Compra')!;
+  state=save(state,tx('refund',5000,{nature:'refund',type:'income',refundOf:purchase.id}));
+  state=JSON.parse(JSON.stringify(state));
+  const before=JSON.stringify(state), metrics=monthMetrics(state,month);
+  assert.equal(metrics.expenses,286234);
+  assert.equal(Object.values(metrics.categoryExpenses).reduce((sum,n)=>sum+n,0),metrics.expenses);
+  assert.equal(metrics.commitment.percent,286234/300000*100);
+  assert.equal(bettingSummary(state,month).amount,15000);
+  const diagnosis=answerEducation(state,month,'Como organizar orçamento?');
+  assert.deepEqual(diagnosis.metrics,metrics);
+  assert.match(diagnosis.summary,/95,41%/);
+  assert.match(diagnosis.summary,/já incluído/);
+  comparePeriodicSpending({initial:0,monthly:bettingSummary(state,month).amount,months:12,annualRate:'12'});
+  assert.equal(JSON.stringify(state),before);
+  await assert.rejects(executeFinanceCommand(state,{id:'reimported',type:'import.commit',payload}));
+});
+test('diagnosis never invents zero commitment or gambling absence from missing data', () => {
+  const state=emptyState();
+  const diagnosis=answerEducation(state,month,'orçamento');
+  assert.match(diagnosis.summary,/Renda não informada/);
+  assert.doesNotMatch(diagnosis.summary,/0%|apostas/);
+  state.profile.confirmedNoIncomeMonths.push(month);
+  assert.match(answerEducation(state,month,'orçamento').summary,/renda reconhecida igual a zero/);
 });

@@ -30,6 +30,9 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 .import-hash { overflow-wrap:anywhere; }
 .educational-comparison form { display:grid; gap:16px; margin:20px 0; }
 .educational-comparison figure { margin:24px 0; }
+.educational-comparison .comparison-strip { display:grid; gap:18px; }
+.educational-comparison .comparison-strip>div { width:100%; }
+.finance-indicator { display:grid; gap:12px; margin-bottom:22px; }
 .educational-comparison .number-list>div { gap:16px; }
 .educational-comparison .number-list dt { min-width:0; }
 @media(max-width:600px){.learn-tabs{max-width:100%;overflow-x:auto}.educational-comparison .number-list>div{flex-wrap:wrap}.educational-comparison .comparison-strip span{flex-wrap:wrap;gap:8px}}

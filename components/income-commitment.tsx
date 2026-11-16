@@ -5,7 +5,7 @@ export const formatPercent = (value: number) => `${value.toLocaleString('pt-BR',
 export function IncomeCommitment({ metrics, month }: { metrics: ReturnType<typeof monthMetrics>; month: string }) {
   const value = metrics.commitment;
   const projected = metrics.projectedCommitment;
-  return <section className="card" aria-labelledby="income-commitment-heading">
+  return <section className="card finance-indicator" aria-labelledby="income-commitment-heading">
     <h2 id="income-commitment-heading">Comprometimento da renda</h2>
     <p className="caption">Período: {month.split('-').reverse().join('/')} · Realizado</p>
     <h3>{value.percent !== null ? formatPercent(value.percent) : value.status === 'zero' ? 'Renda reconhecida igual a zero' : 'Renda não informada para o período'}</h3>
