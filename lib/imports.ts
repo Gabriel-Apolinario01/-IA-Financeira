@@ -2,9 +2,15 @@ import { isValidDate, MAX_MONEY } from './finance';
 import type { Command, FinanceState, Transaction } from './types';
 import { applyCommand, validateMagnitude } from './commands';
 
-export type ImportRow = { line: number; date: string; description: string; amount: number; externalId?: string; raw: string; error?: string };
+export type ImportRow = { line: number; date: string; description: string; amount: number; externalId?: string; raw?: string; error?: string };
 export type ImportBatch = { id: string; hash: string; account: string; name: string; source: 'csv' | 'ofx'; status: 'confirmed' | 'ignored'; createdAt: string; rows: ImportRow[]; transactions: Transaction[]; duplicates: number; ignored: number; errors: number; audit: { at: string; action: string }[] };
 export const IMPORT_LIMIT = 100_000;
+
+/** Legacy batches may contain rejected rows. Hide them without deleting old data. */
+export function confirmedImportRows(batch: ImportBatch): ImportRow[] {
+  const lines = new Set(batch.transactions.map(t => t.origin?.line));
+  return batch.rows.filter(row => lines.has(row.line));
+}
 
 function amount(value: string, locale: 'br' | 'us') {
   const pattern = locale === 'br' ? /^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/ : /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/;
@@ -106,18 +112,24 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
   if (accepted.some(n => !parsed.rows.some(r => r.line === n && !r.error))) throw new Error('Há linhas inválidas na seleção.');
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content as string));
   const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  if (batches.some(b => b.hash === hash && b.source === parsed.source)) throw new Error('Arquivo já importado. Consulte o histórico para restaurar ou revisar o lote.');
+  const sameFile = batches.filter(b => b.hash === hash && b.source === parsed.source && b.account === account);
+  // Reverted batches reserve their rows so restoring cannot duplicate another lot.
+  const importedLines = new Set(sameFile.flatMap(b => b.transactions.map(t => t.origin?.line)));
+  if (accepted.length && accepted.every(line => importedLines.has(line))) throw new Error('Arquivo já importado para estas linhas. Consulte o histórico para restaurar ou revisar o lote.');
   if (batches.length >= 100) throw new Error('Limite de 100 lotes nesta etapa. Exporte seus dados.');
   const keys = new Map(batches.filter(b => b.account === account && b.source === parsed.source).flatMap(b => b.transactions.filter(t => t.origin?.externalId).map(t => [t.origin!.externalId!, t] as const)));
+  const scopeDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([account, parsed.source, hash])));
+  const scopedHash = Array.from(new Uint8Array(scopeDigest), b => b.toString(16).padStart(2, '0')).join('');
   let next = state; const transactions: Transaction[] = []; let duplicates = 0;
   for (const row of parsed.rows) {
     if (row.error || !accepted.includes(row.line)) continue;
+    if (importedLines.has(row.line)) { duplicates++; continue; }
     if (row.externalId && keys.has(row.externalId)) {
       const existing = keys.get(row.externalId)!;
       if (existing.amount !== Math.abs(row.amount) || existing.date !== row.date || existing.type !== (row.amount < 0 ? 'expense' : 'income')) throw new Error('O mesmo identificador externo chegou com valor ou data diferente. Revise a fonte; o lote não foi salvo.');
       duplicates++; continue;
     }
-    const transaction: Transaction = { id: `imp_${hash.slice(0,32)}_${row.line}`, date: row.date, description: row.description, amount: Math.abs(row.amount), type: row.amount < 0 ? 'expense' : 'income', category: 'outros', status: 'realized', expenseKind: 'variable' };
+    const transaction: Transaction = { id: `imp_${scopedHash.slice(0,32)}_${row.line}`, date: row.date, description: row.description, amount: Math.abs(row.amount), type: row.amount < 0 ? 'expense' : 'income', category: 'outros', status: 'realized', expenseKind: 'variable' };
     if (next.transactions.some(t => t.id === transaction.id)) throw new Error('Identificador já existente. Revise o histórico.');
     next = applyCommand(next, { id: command.id, type: 'transaction.save', payload: { ...transaction } });
     transaction.origin = { batchId: command.id, line: row.line, externalId: row.externalId, account, currency: 'BRL', timezone: 'America/Sao_Paulo', originalDescription: row.description };
@@ -125,6 +137,8 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
     transactions.push(transaction); if (row.externalId) keys.set(row.externalId, transaction);
   }
   const at = new Date().toISOString();
-  const batch: ImportBatch = { id: command.id, hash, name: name as string, account, source: parsed.source, status: 'confirmed', createdAt: at, rows: parsed.rows, transactions, duplicates, ignored: parsed.rows.filter(r => !r.error && !accepted.includes(r.line)).length, errors: parsed.rows.filter(r => r.error).length, audit: [{ at, action: 'confirmed' }] };
+  const savedLines = new Set(transactions.map(t => t.origin!.line));
+  const rows = parsed.rows.filter(r => savedLines.has(r.line)).map(({ line, date, description, amount, externalId }) => ({ line, date, description, amount, ...(externalId ? { externalId } : {}) }));
+  const batch: ImportBatch = { id: command.id, hash, name: name as string, account, source: parsed.source, status: 'confirmed', createdAt: at, rows, transactions, duplicates, ignored: parsed.rows.filter(r => !r.error && !accepted.includes(r.line)).length, errors: parsed.rows.filter(r => r.error).length, audit: [{ at, action: 'confirmed' }] };
   return { ...next, importBatches: [...batches, batch] };
 }

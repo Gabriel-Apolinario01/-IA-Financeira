@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import type { FinanceState } from '@/lib/types';
-import { IMPORT_LIMIT, parseImport, possibleMatches } from '@/lib/imports';
+import { IMPORT_LIMIT, parseImport, possibleMatches, confirmedImportRows } from '@/lib/imports';
 import { formatMoney } from '@/lib/finance';
 
 export function ImportPanel({ state, send, pending }: { state: FinanceState; send: (type: string, payload: Record<string, unknown>) => Promise<FinanceState>; pending: boolean }) {
@@ -62,7 +62,7 @@ export function ImportPanel({ state, send, pending }: { state: FinanceState; sen
     {!(state.importBatches?.length) && <p>Nenhum arquivo importado.</p>}
     {state.importBatches?.slice().reverse().map(batch => <details key={batch.id}><summary>{batch.name} · {batch.account} · {batch.transactions.length} lançamentos · {batch.status === 'confirmed' ? 'Confirmado' : 'Desfeito'}</summary>
       <p>{batch.duplicates} duplicados; {batch.ignored} ignorados; {batch.errors} erros. Origem: {batch.source.toUpperCase()} · BRL · America/Sao_Paulo</p><p className="import-hash">SHA-256: {batch.hash}</p>
-      <ul>{batch.rows.map(row => <li key={row.line}>Linha {row.line}: {row.date} · {row.description} · {row.error || formatMoney(row.amount)}</li>)}</ul>
+      <ul>{confirmedImportRows(batch).map(row => <li key={row.line}>Linha {row.line}: {row.date} · {row.description} · {formatMoney(row.amount)}</li>)}</ul>
       <p>{batch.audit.map(a => `${a.at}: ${a.action === 'confirmed' ? 'confirmado' : 'desfeito'}`).join(' / ')}</p>
       <button className="button secondary" disabled={pending} onClick={() => void change(batch.status === 'confirmed' ? 'import.revert' : 'import.restore', batch.id)}>{batch.status === 'confirmed' ? 'Desfazer lote' : 'Restaurar lote'}</button>
     </details>)}
