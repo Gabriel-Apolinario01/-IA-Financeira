@@ -113,6 +113,18 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
   if (accepted.some(n => !parsed.rows.some(r => r.line === n && !r.error))) throw new Error('Há linhas inválidas na seleção.');
   // Optional reviewed-flow contract. Old clients may omit it; absence never rewrites legacy data.
   const natures = new Map<number, ReturnType<typeof validateTransactionNature>>();
+  const edits = new Map<number, Record<string, unknown>>();
+  if (Object.hasOwn(command.payload, 'edits')) {
+    const input = command.payload.edits;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Revisão inválida.');
+    for (const [key, value] of Object.entries(input)) {
+      const line = Number(key);
+      if (!/^[1-9]\d*$/.test(key) || !accepted.includes(line) || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Linha de revisão inválida.');
+      const fields = value as Record<string, unknown>;
+      if (Object.keys(fields).some(k => !['description','category','refundOf'].includes(k))) throw new Error('Campo de revisão não permitido.');
+      edits.set(line, fields);
+    }
+  }
   if (Object.hasOwn(command.payload, 'natures')) {
     const input = command.payload.natures;
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Revisão de naturezas inválida.');
@@ -124,6 +136,9 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
       natures.set(line, nature);
     }
     if (accepted.some(line => !natures.has(line))) throw new Error('Revise a natureza de todas as linhas selecionadas.');
+  }
+  for (const [line, nature] of natures) {
+    if (nature === 'refund' && !edits.get(line)?.refundOf) throw new Error('Confirme o lançamento original antes de importar o estorno.');
   }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content as string));
   const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
@@ -146,8 +161,12 @@ export async function executeFinanceCommand(state: FinanceState, command: Comman
     }
     const transaction: Transaction = { id: `imp_${scopedHash.slice(0,32)}_${row.line}`, date: row.date, description: row.description, amount: Math.abs(row.amount), type: row.amount < 0 ? 'expense' : 'income', category: 'outros', status: 'realized', expenseKind: 'variable' };
     if (natures.has(row.line)) transaction.nature = natures.get(row.line)!;
+    const edit = edits.get(row.line);
+    const reviewed = applyCommand(next, { id: command.id, type: 'transaction.save', payload: { ...transaction, ...edit } });
+    const validated = reviewed.transactions.find(t => t.id === transaction.id)!;
+    Object.assign(transaction, validated);
     if (next.transactions.some(t => t.id === transaction.id)) throw new Error('Identificador já existente. Revise o histórico.');
-    next = applyCommand(next, { id: command.id, type: 'transaction.save', payload: { ...transaction } });
+    next = reviewed;
     transaction.origin = { batchId: command.id, line: row.line, externalId: row.externalId, account, currency: 'BRL', timezone: 'America/Sao_Paulo', originalDescription: row.description };
     next = { ...next, transactions: next.transactions.map(t => t.id === transaction.id ? transaction : t) };
     transactions.push(transaction); if (row.externalId) keys.set(row.externalId, transaction);
