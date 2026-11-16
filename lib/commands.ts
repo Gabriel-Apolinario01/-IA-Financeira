@@ -71,7 +71,10 @@ function profileUpdate(profile: Profile, payload: Payload): Profile {
 function transaction(payload: Payload, prior?: Transaction): Transaction {
   const nature = Object.hasOwn(payload, 'nature') ? validateTransactionNature(payload.nature) : prior?.nature;
   const refundOf = Object.hasOwn(payload, 'refundOf') ? (payload.refundOf === null ? undefined : id(payload.refundOf)) : prior?.refundOf;
-  return { id: id(payload.id), description: text(payload.description, 'Descrição'), amount: money(payload.amount, 'Valor do lançamento', false),
+  const description = payload.category === 'apostas' && payload.type === 'expense'
+    ? text(payload.description ?? '', 'Descrição', 160, true) || 'Gasto com apostas'
+    : text(payload.description, 'Descrição');
+  return { id: id(payload.id), description, amount: money(payload.amount, 'Valor do lançamento', false),
     ...(nature !== undefined ? { nature: validateTransactionNature(nature) } : {}),
     ...(refundOf !== undefined ? { refundOf } : {}),
     type: enumeration(payload.type, ['income', 'expense'], 'Tipo do lançamento'), category: category(payload.category), date: date(payload.date, 'Data do lançamento'),

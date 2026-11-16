@@ -148,6 +148,15 @@ export function monthMetrics(state: FinanceState, month: string) {
   };
 }
 export interface SimulationInput { initial: number; monthly: number; months: number; annualRate: string }
+/** Explicitly categorized recognized consumption only; no inference from descriptions. */
+export function bettingSummary(state: FinanceState, month: string) {
+  const metrics = monthMetrics(state, month);
+  const records = state.transactions.filter(t => t.date.startsWith(month) && t.status === 'realized'
+    && (t.nature ?? t.type) === 'expense' && t.category === 'apostas').length;
+  const amount = metrics.categoryExpenses.apostas ?? 0;
+  return { records, amount, pending: metrics.categoryPending.apostas ?? 0,
+    share: metrics.expenses > 0 ? amount / metrics.expenses * 100 : null };
+}
 /**
  * Annual rate is effective; contributions occur at the END of each month.
  * Internal balances retain 40-digit decimal precision. Each output row is rounded
@@ -175,6 +184,7 @@ export function simulate({ initial, monthly, months, annualRate }: SimulationInp
   const balance = balanceExact.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
   return { rows, contributed, balance, growth: balance - contributed };
 }
+
 export interface SavingSuggestion {
   id: string; month: string; category: string; baseAmount: number;
   estimatedSaving: number; reductionPercent: number; title: string; reason: string;

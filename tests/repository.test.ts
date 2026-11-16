@@ -47,6 +47,21 @@ const debt = (id: string, transactionId: string): Command => ({ id: `debt-${id}`
 } });
 const status = (code: number) => (error: unknown) => error instanceof RepositoryError && error.status === code;
 
+test('optional betting category is persisted by the server and remains isolated between owners', async () => {
+  const {db,gateway,repository}=database();
+  try {
+    const command=transaction('betting',1234);
+    command.payload.category='apostas'; command.payload.description=''; command.payload.nature='expense';
+    await execute(repository,'A',command,0);
+    const reloaded=await new FinanceRepository(gateway).get('A');
+    assert.equal(reloaded.state.transactions[0].description,'Gasto com apostas');
+    assert.equal(monthMetrics(reloaded.state,'2026-10').categoryExpenses.apostas,1234);
+    assert.equal((await repository.get('B')).state.transactions.length,0);
+    await assert.rejects(execute(repository,'B',{id:'remove',type:'transaction.delete',payload:{id:'betting'}},0),status(400));
+    assert.equal((await repository.get('A')).revision,1);
+  } finally {db.close();}
+});
+
 for (const source of ['tsv','ofx'] as const) {
   test(`reviewed ${source} preserves nature and dashboard totals after repository reload`, async () => {
     const {db,gateway,repository}=database();

@@ -62,5 +62,6 @@ export const CATEGORIES = [
   { id: 'assinaturas', label: 'Assinaturas', color: '#9c87a5' },
   { id: 'trabalho', label: 'Custos do trabalho', color: '#93845d' },
   { id: 'dividas', label: 'Dívidas', color: '#ad7770' },
+  { id: 'apostas', label: 'Apostas (opcional)', color: '#8b7eaf' },
   { id: 'outros', label: 'Outros', color: '#89948c' },
 ] as const;
