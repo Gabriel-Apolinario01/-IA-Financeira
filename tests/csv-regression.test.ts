@@ -22,6 +22,10 @@ test('auto mode refuses ambiguous numbers and inconsistent file conventions', ()
   const parsed=parseImport('mixed.csv','data;descricao;valor\n2026-11-16;Um;-12,34\n2026-11-16;Dois;-12.34','auto');
   assert.ok(parsed.rows.every(r=>r.error?.includes('inconsistentes')));
 });
+test('informational balances and ambiguous rows do not establish a numeric convention for other rows', () => {
+  const rows=parseImport('a.csv','data;descricao;valor\n2026-11-16;Saldo anterior;3.000,00\n2026-11-16;Ambíguo;1.234\n2026-11-16;Padaria;-12.34','auto').rows;
+  assert.ok(rows[0].error);assert.match(rows[1].error!,/ambíguo/);assert.equal(rows[2].amount,-1234);assert.equal(rows[2].error,undefined);
+});
 test('comma-delimited quoted values, reordered alias headers, BOM and quotes parse', () => {
   const parsed=parseImport('quoted.csv','\uFEFF"Histórico","Valor do lançamento","Data de lançamento"\r\n"Padaria, loja ""Centro""","-R$ 12,34",16/11/2026');
   assert.equal(parsed.rows[0].description,'Padaria, loja "Centro"');assert.equal(parsed.rows[0].amount,-1234);

@@ -97,8 +97,10 @@ export function parseImport(name: string, content: string, locale: ImportLocale 
     matrix.forEach((cells, i) => {
       let date = (cells[indices[0]] ?? '').trim(); date = date.replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, '$3-$2-$1');
       const description = (cells[indices[1]] ?? '').trim();
+      const informational = /^(?:saldo(?: anterior| inicial| final| do dia| disponivel)?|total(?: de (?:debitos|creditos|entradas|saidas))?|totais)\s*[:\-]?$/i.test(normalize(description));
       const values = split ? [cells[debit] ?? '',cells[credit] ?? ''] : [cells[indices[2]] ?? ''];
-      if (locale === 'auto') for(const value of values.filter(v=>v.trim())) {
+      if (locale === 'auto' && !informational) for(const value of values.filter(v=>v.trim())) {
+        try {amount(value,'auto',true);} catch {continue;}
         const valid = (['br','us'] as const).filter(format=>{try {amount(value,format,true);return true;} catch {return false;}});
         if(valid.length===1) formats.add(valid[0]);
       }
@@ -112,7 +114,7 @@ export function parseImport(name: string, content: string, locale: ImportLocale 
           row.amount = c || -Math.abs(d);
         } catch(e) {row.amount=0;row.error=(e as Error).message;}
       }
-      if (/^(?:saldo(?: anterior| inicial| final| do dia| disponivel)?|total(?: de (?:debitos|creditos|entradas|saidas))?|totais)\s*[:\-]?$/i.test(normalize(description))) {row.amount=0;row.error='Linha de saldo ou total informativo; não é um lançamento importável.';}
+      if (informational) {row.amount=0;row.error='Linha de saldo ou total informativo; não é um lançamento importável.';}
       if (cells.length !== headers.length) rows[rows.length - 1].error = 'Quantidade de colunas diferente do cabeçalho.';
     });
     if (formats.size>1) for(const row of rows) if(!row.error) {row.amount=0;row.error='Formatos numéricos inconsistentes no arquivo. Separe ou corrija a origem antes de importar.';}
