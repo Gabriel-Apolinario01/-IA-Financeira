@@ -1,10 +1,15 @@
+import { getAuth } from "../../lib/auth";
 import { getAzureUser } from "../azure-auth";
 import { azurePostgresGateway, hasAzurePostgresConfig } from "../../lib/azure-postgres";
 import { FinanceRepository, RepositoryError } from "../../lib/repository";
 
 export async function authenticatedContext(request: Request) {
-  const user = getAzureUser(request.headers);
-  if (!user) throw new RepositoryError(401, "Entre com sua conta Microsoft para continuar.");
+  const session = process.env.AZURE_AUTH_MODE === "email"
+    ? await getAuth().api.getSession({ headers: request.headers }) : null;
+  const user = process.env.AZURE_AUTH_MODE === "email"
+    ? (session ? { userId: `email:${session.user.id}`, displayName: session.user.name } : null)
+    : getAzureUser(request.headers);
+  if (!user) throw new RepositoryError(401, "Entre na sua conta para continuar.");
   if (!hasAzurePostgresConfig()) throw new RepositoryError(503, "O banco Azure ainda não está configurado.");
   return {
     ownerId: user.userId,
@@ -15,7 +20,7 @@ export async function authenticatedContext(request: Request) {
 
 export function requireSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
-  const expected = new URL(request.url).origin;
+  const expected = process.env.BETTER_AUTH_URL || new URL(request.url).origin;
   if (!origin || origin !== expected || request.headers.get("sec-fetch-site") === "cross-site") {
     throw new RepositoryError(403, "Esta alteração precisa ser enviada pelo próprio aplicativo.");
   }

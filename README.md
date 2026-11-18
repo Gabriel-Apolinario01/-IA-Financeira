@@ -1,62 +1,65 @@
-# IA Financeira Azure
+# IA Financeira
 
-Cópia preparada para executar como aplicação Node.js no Azure. A demonstração usa valores fictícios e continua disponível sem login. A prévia pode rodar no plano gratuito F1 sem serviços adicionais; contas autenticadas exigem Microsoft Entra ID no Azure App Service e Azure Database for PostgreSQL Flexible Server.
+Aplicação Next.js para organização financeira e educação: lançamentos, orçamento, metas, reserva, dívidas, importação CSV/OFX e explicações baseadas em conteúdo revisado. Não conecta contas bancárias nem movimenta dinheiro.
 
-## Ver a demonstração neste computador
+## Executar com cadastro, login e banco real local
 
-Requer Node.js 22.13 ou superior e npm.
+Requisitos: Node.js 24 e npm. Na primeira execução, a instalação baixa os binários PostgreSQL de teste da dependência `embedded-postgres`.
 
-```powershell
+```sh
 npm ci
-npm run dev
+npm run dev:local
 ```
 
-Abra `http://127.0.0.1:5174/`. Os botões **Entrar** e **Começar** levam à tela de login. O acesso Microsoft depende do Entra configurado no Azure; o botão Google informa que essa integração ainda não foi configurada. Na prévia, continuar com e-mail abre uma tela ilustrativa para criar senha, mas nenhum valor de senha é salvo ou enviado. Use **Acessar demonstração** para explorar os recursos com dados fictícios, salvos somente neste navegador. A demonstração local não conecta ao banco Azure.
+Abra **http://localhost:5174/login**, escolha **Ainda não tenho conta — cadastrar** e crie uma conta. Este modo usa PostgreSQL real, acessível somente por loopback. Dados e credenciais locais ficam em `.local-postgres/`, ignorada pelo Git. Não use contas ou dados financeiros reais nos testes. `Ctrl+C` encerra o servidor e o banco; a próxima execução preserva os dados locais.
 
-Para encerrar, pressione Ctrl+C no terminal.
+`npm run dev` inicia apenas o Next.js: nesse caso configure o banco e a autenticação em `.env.local`, conforme `.env.example`, e execute `npm run db:prepare` antes. Para testar a compilação otimizada local: `npm run build` e `node --env-file-if-exists=.env.local scripts/local-dev.mjs --production`.
 
-## Arquitetura Azure
+## Autenticação e dados
 
-- **Azure App Service para Linux**, runtime Node.js 24, executando Next.js no servidor.
-- **App Service Authentication (Easy Auth)** com Microsoft Entra ID. O site e a demonstração podem aceitar visitantes anônimos; as APIs financeiras exigem identidade Entra.
-- **Azure Database for PostgreSQL Flexible Server** para contas, registros e limites de uso.
-- **Identidade gerenciada do App Service** para conectar ao PostgreSQL sem senha fixa. O código aceita uma connection string para desenvolvimento controlado, mas a configuração de produção usa identidade gerenciada.
-- A identificação dos dados combina tenant e principal do Entra. Revisões, idempotência, exclusão e limites por usuário continuam no repositório; atualizações concorrentes usam transações e revisão condicional.
+- `AZURE_AUTH_MODE=email`: Better Auth com e-mail/senha, hash de senha da biblioteca, sessão no PostgreSQL e cookie HttpOnly/SameSite. HTTPS fora de localhost, cookie Secure em HTTPS, sessão de sete dias e revogação no logout.
+- Cada espaço financeiro pertence ao identificador da sessão. Identificadores recebidos no corpo da requisição não concedem acesso a outro usuário.
+- Revisões condicionais, geração do espaço e recibos de comandos protegem contra conflitos e duplicação de envios.
+- Consultas SQL usam parâmetros. Conexões remotas exigem TLS com validação do certificado.
+- Nome/e-mail cadastrado não significa e-mail verificado. Verificação, recuperação por e-mail e MFA não estão implementados; exigem uma decisão e serviço de entrega adicionais. A interface informa a ausência de recuperação ao cadastrar.
+- A exclusão disponível nas configurações remove somente o perfil financeiro e seus registros; mantém o cadastro de acesso, conforme informado na interface.
+- O modo legado `app-service` mantém Microsoft Entra/Easy Auth. Ele não habilita o cadastro por e-mail.
+- `AZURE_AUTH_MODE=preview` disponibiliza apenas demonstração. Não permite acesso anônimo ao banco das contas.
 
-O schema é criado por `npm run prepare:azure-db` ou durante `npm start`. A migração usa `CREATE TABLE IF NOT EXISTS` e preserva tabelas existentes. Ela não copia dados de nenhum banco D1 anterior.
+## Inteligência artificial
 
-## Configuração do Azure
+A IA organiza trechos educativos revisados; os cálculos permanecem determinísticos no aplicativo. A chamada usa a Responses API da OpenAI, com JSON Schema estrito. O servidor valida novamente os IDs recebidos e exibe apenas os textos/fontes locais autorizados. O modelo não recebe ferramentas de escrita, SQL, senhas, nomes, descrições ou a pergunta bruta.
 
-### Prévia gratuita
+Em `.env.local` ou nas variáveis privadas do App Service:
 
-O script `npm start` assume `AZURE_AUTH_MODE=preview` quando a variável não foi definida. Nesse modo, o App Service serve a página inicial e a demonstração pública sem banco. Os dados da demonstração ficam no armazenamento local do navegador; as APIs de conta continuam exigindo uma identidade Microsoft válida e não aceitam gravações anônimas. Não configure credenciais de banco para essa prévia.
+```dotenv
+AI_ENABLED=true
+OPENAI_API_KEY=<segredo privado>
+OPENAI_MODEL=<modelo disponível com Responses API e JSON Schema estrito>
+AI_GLOBAL_DAILY_LIMIT=200
+```
 
-### Contas autenticadas
+Depois, na conta, habilite o consentimento em **Configurações** e solicite uma explicação em **Aprender**. Sem chave, consentimento ou resposta válida, a interface informa que está usando análise por regras. Os limites de chamadas ao provedor são 20 por conta por dia e 200 globais por dia por padrão, com janelas UTC; a API de diagnóstico também limita dez pedidos por minuto. O teto global é configurável de 1 a 10.000; nenhuma dessas cotas substitui o orçamento do projeto no provedor.
 
-1. Crie um Azure App Service Linux com Node.js 24 e um Azure Database for PostgreSQL Flexible Server.
-2. No App Service, habilite uma identidade gerenciada atribuída pelo sistema e configure **Authentication** com Microsoft Entra ID. Restrinja o aplicativo ao tenant pretendido. Permita acesso anônimo à página inicial para que a demonstração permaneça disponível; as rotas `/api/*` validam a identidade no servidor.
-3. Crie no PostgreSQL um principal para a identidade gerenciada do App Service e conceda acesso apenas ao banco da aplicação.
-4. Configure estes Application settings no App Service:
+`npm run verify:ai` realiza **uma chamada real, potencialmente cobrada**, com dados sintéticos. Sucesso exige resposta aceita pelos controles. Os testes automatizados comuns usam respostas simuladas e não comprovam disponibilidade do provedor em produção.
 
-   - `AZURE_AUTH_MODE=app-service`
-   - `AZURE_TENANT_ID=<tenant Microsoft Entra permitido>`
-   - `AZURE_POSTGRES_HOST=<servidor>.postgres.database.azure.com`
-   - `AZURE_POSTGRES_DATABASE=iafinanceira`
-   - `AZURE_POSTGRES_USER=<principal criado para a identidade gerenciada>`
-   - `AZURE_POSTGRES_PORT=5432`
-   - `SCM_DO_BUILD_DURING_DEPLOYMENT=true`
+## Azure
 
-   Não configure `AZURE_POSTGRES_CONNECTION_STRING` na produção quando a identidade gerenciada estiver ativa.
-5. Publique o código com `npm run build` e `npm start`. O App Service informa a porta por `PORT`; o script de inicialização respeita esse valor.
+Siga [o roteiro de publicação](docs/DEPLOYMENT.md). Login online requer PostgreSQL, URL pública e segredo de sessão configurados no App Service. A IA também requer chave, modelo e faturamento disponíveis no provedor. A existência de código ou um build bem-sucedido não comprova essas configurações.
 
-Easy Auth precisa estar ativo antes de aceitar tráfego autenticado. O servidor só confia em `X-MS-CLIENT-PRINCIPAL` quando `AZURE_AUTH_MODE=app-service`, `WEBSITE_AUTH_ENABLED=true`, `AZURE_TENANT_ID` está definido e o processo está dentro do App Service (`WEBSITE_SITE_NAME` presente). O código também exige que o tenant da identidade corresponda ao tenant configurado. Não habilite esse modo atrás de um proxy que aceite cabeçalhos de identidade do cliente.
-
-## Variáveis locais
-
-Veja `.env.example`. Para desenvolvimento com PostgreSQL, use `AZURE_POSTGRES_CONNECTION_STRING` em `.env.local` e mantenha o arquivo fora do Git. Sem banco configurado, a demonstração continua funcionando, mas as contas autenticadas ficam indisponíveis.
+O workflow testa pull requests e só publica `main`. Usa `npm ci`, ações fixadas por commit e auditoria das dependências de produção. Nenhuma credencial deve ser enviada ao GitHub em arquivos ou incorporada em variáveis `NEXT_PUBLIC_*`.
 
 ## Verificação
 
-`npm run build` compila a aplicação para Next.js/Node. `npm run typecheck` verifica os tipos. Os testes herdados em `tests/` cobrem cálculos e o contrato do repositório original; a conexão real com Entra e PostgreSQL precisa ser verificada depois que os recursos Azure estiverem provisionados.
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run test:integration
+npm run build
+npm audit --omit=dev --audit-level=high
+```
 
-Os documentos de descoberta e decisões em `docs/` vieram do repositório original e registram decisões da versão Cloudflare. Este README descreve a arquitetura Azure desta cópia.
+Os testes de integração iniciam PostgreSQL na porta local 55439, criam contas sintéticas e verificam senha, sessão, isolamento entre contas, CSRF, gravação, exclusão e logout. O processo encerra o banco; as pastas ignoradas em `.test-data/` são mantidas porque o Windows pode bloquear a remoção imediata. As dependências e binários de teste não são serviços de produção.
+
+Controles e limites das nove categorias estão em [OWASP LLM 2026](docs/OWASP-LLM-2026.md). Trata-se de implementação e evidências de teste do projeto, sem certificação OWASP ou promessa de ausência de vulnerabilidades.
