@@ -15,6 +15,9 @@ if (authMode === "app-service") {
     throw new Error("Habilite App Service Authentication para Microsoft Entra e configure AZURE_TENANT_ID antes de iniciar.");
   }
 
+}
+
+if (authMode === "app-service" || authMode === "email") {
   const preparation = spawnSync(process.execPath, ["scripts/prepare-azure-db.mjs"], {
     stdio: "inherit",
     env: process.env,
@@ -24,7 +27,7 @@ if (authMode === "app-service") {
 } else if (authMode === "preview") {
   console.info("Prévia pública iniciada sem Microsoft Entra ou PostgreSQL; dados financeiros ficam apenas no navegador.");
 } else {
-  throw new Error("AZURE_AUTH_MODE deve ser 'preview' ou 'app-service'.");
+  throw new Error("AZURE_AUTH_MODE deve ser 'email', 'preview' ou 'app-service'.");
 }
 
 const nextCli = path.join(projectRoot, "node_modules", "next", "dist", "bin", "next");

@@ -1,8 +1,7 @@
-import { DefaultAzureCredential } from "@azure/identity";
-import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import { createPostgresPool } from "./postgres-config.mjs";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type { SqlGateway, SqlStatement, SqlValue } from "./repository";
 
-const POSTGRES_SCOPE = "https://ossrdbms-aad.database.windows.net/.default";
 const globalForAzure = globalThis as typeof globalThis & {
   iaFinanceiraAzurePool?: Pool;
   iaFinanceiraAzureGateway?: SqlGateway;
@@ -18,44 +17,7 @@ export function hasAzurePostgresConfig(): boolean {
 }
 
 export function azurePostgresPool(): Pool {
-  if (globalForAzure.iaFinanceiraAzurePool) return globalForAzure.iaFinanceiraAzurePool;
-
-  const connectionString = process.env.AZURE_POSTGRES_CONNECTION_STRING?.trim();
-  if (connectionString) {
-    globalForAzure.iaFinanceiraAzurePool = new Pool({
-      connectionString,
-      ssl: process.env.AZURE_POSTGRES_SSL === "false" ? false : { rejectUnauthorized: true },
-      max: Number(process.env.AZURE_POSTGRES_POOL_SIZE || 5),
-      connectionTimeoutMillis: 10_000,
-      idleTimeoutMillis: 30_000,
-    });
-    return globalForAzure.iaFinanceiraAzurePool;
-  }
-
-  const host = process.env.AZURE_POSTGRES_HOST?.trim();
-  const database = process.env.AZURE_POSTGRES_DATABASE?.trim();
-  const user = process.env.AZURE_POSTGRES_USER?.trim();
-  if (!host || !database || !user) {
-    throw new Error("Configure a conexão do Azure Database for PostgreSQL.");
-  }
-
-  const credential = new DefaultAzureCredential();
-  globalForAzure.iaFinanceiraAzurePool = new Pool({
-    host,
-    database,
-    user,
-    port: Number(process.env.AZURE_POSTGRES_PORT || 5432),
-    password: async () => {
-      const token = await credential.getToken(POSTGRES_SCOPE);
-      if (!token?.token) throw new Error("Não foi possível obter a identidade gerenciada do Azure.");
-      return token.token;
-    },
-    ssl: { rejectUnauthorized: true },
-    max: Number(process.env.AZURE_POSTGRES_POOL_SIZE || 5),
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
-  });
-  return globalForAzure.iaFinanceiraAzurePool;
+  return globalForAzure.iaFinanceiraAzurePool ??= createPostgresPool();
 }
 
 function postgresParameters(sql: string): string {

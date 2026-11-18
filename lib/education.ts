@@ -14,6 +14,10 @@ export const EDUCATION: EducationItem[] = [
   {id:'diversification',title:'Entender a diversificação',theme:'Diversificação',summary:'Diversificar pode reduzir alguns riscos, mas não elimina a possibilidade de perdas. Conhecer objetivos e riscos vem antes de escolher investimentos.',example:'Concentrar tudo em uma única fonte deixa o resultado mais dependente dela. Isso não define quais ativos nem percentuais seriam adequados para você.',sourceTitle:'CVM · Evitando problemas',url:'https://www.gov.br/investidor/pt-br/investir/cuidados-ao-investir/evitando-problemas',consultedAt:'2026-10-06',keywords:['diversificacao','diversificar','carteira']},
 ];
 
+// Runtime immutability complements the reviewed, version-controlled corpus.
+for (const item of EDUCATION) { Object.freeze(item.keywords); Object.freeze(item); }
+Object.freeze(EDUCATION);
+
 export function retrieveEducation(question: string): EducationItem[] {
   const q=question.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   if (/ignore|instruc|prompt|system|senha|token|bitcoin|acao comprar|qual ativo|cotacao|selic hoje/.test(q)) return [];

@@ -1,5 +1,5 @@
-import LoginPage from "@/components/login-page";
-
+import LoginPage from '../../components/login-page';
+export const dynamic = 'force-dynamic';
 export default function Page() {
-  return <LoginPage localPreviewAvailable={process.env.NODE_ENV !== "production"} />;
+  return <LoginPage emailEnabled={process.env.AZURE_AUTH_MODE === 'email'} microsoftEnabled={process.env.AZURE_AUTH_MODE === 'app-service'} />;
 }
