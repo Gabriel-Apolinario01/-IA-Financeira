@@ -6,6 +6,7 @@ export interface DocumentPage { method: 'text' | 'ocr'; text: string }
 let active = 0;
 
 export function documentSignature(bytes: Buffer, mime: string) {
+  if (mime === 'application/pdf') return bytes.subarray(0, 5).equals(Buffer.from('%PDF-'));
   if (mime === 'image/jpeg') return bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'));
   if (mime === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
   if (mime === 'image/webp') return bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';

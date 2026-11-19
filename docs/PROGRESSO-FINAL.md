@@ -16,10 +16,14 @@ Os cinco conflitos envolveram login, limites de requisição, CI, manifesto npm 
 | Auditoria de runtime | Zero vulnerabilidades reportadas |
 | Build de produção | Aprovado. A primeira execução encontrou EPERM ao criar uma pasta gerada em .next. A repetição autorizada completou pré-renderização e coleta de traces. |
 
-O teste de integração usa um cluster PostgreSQL local descartável e duas contas fictícias. Seu resultado e os cenários de documentos e chat serão registrados após verificação.
+O teste de integração passou com PostgreSQL local real e duas contas fictícias. Foram verificados cadastro, senha, sessão, isolamento, persistência, CSRF, exclusão e logout. O primeiro cluster do teste demorou além do prazo sob a restrição local. A repetição autorizada concluiu com código zero.
 
 ## Leitura de fotografias
 
 O leitor local executa Tesseract com o idioma português instalado junto com a aplicação. Sharp verifica o formato decodificado e as dimensões antes da normalização. Cada subprocesso recebe bytes pelo stdin, um ambiente sem chaves de provedor e prazo de 45 segundos. O código limita o arquivo a 5 MiB, a imagem a 16 megapixels e a concorrência a duas leituras por processo do servidor. O OCR não requer credenciais nem envio a terceiros.
 
 O teste `node --import tsx --test tests/document-reader.test.ts` passou nos quatro cenários. Fotos sintéticas foram rasterizadas em JPEG, PNG e WebP antes do reconhecimento. O texto reconhecido continha os títulos e os valores impressos da conta de energia (R$ 182,34), do cupom (R$ 1.234,56) e do PIX (R$ 72,19). Assinatura trocada e JPEG truncado foram recusados. Esse teste cobre o leitor de pixels. Extração dos campos, confirmação, PDF e navegador têm verificações próprias.
+
+## PDF digital e digitalizado
+
+PDF.js lê o texto por página no subprocesso privado. Páginas sem texto suficiente são renderizadas em memória com até 2400 × 3200 pixels e passam pelo mesmo OCR. O leitor recusa mais de quatro páginas. Os testes em `tests/document-pdf.test.ts` passaram (2/2). Um PDF sintético misto produziu R$ 1.234,56 na página digital e R$ 71,98 na página composta exclusivamente por JPEG. O teste verifica a origem de cada texto. Outro PDF, de cinco páginas, foi rejeitado.
