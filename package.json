@@ -23,6 +23,7 @@
     "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
+    "@tesseract.js-data/por": "1.0.0",
     "better-auth": "1.7.25",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -42,8 +43,10 @@
     "react-hook-form": "^7.85.0",
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.8.0",
+    "sharp": "0.35.5",
     "sonner": "^2.0.8",
     "tailwind-merge": "3.6.0",
+    "tesseract.js": "7.0.0",
     "vaul": "^1.1.2",
     "zod": "4.6.7"
   },
