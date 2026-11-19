@@ -1,4 +1,5 @@
 import { azurePostgresPool, hasAzurePostgresConfig } from '../../../lib/azure-postgres';
+import { aiConfig } from '../../../lib/ai-config';
 import { getAuth } from '../../../lib/auth';
 import { jsonResponse } from '../_shared';
 export const runtime = 'nodejs';
@@ -17,6 +18,7 @@ export async function GET() {
     }
     else authentication = process.env.AZURE_AUTH_MODE === 'app-service' && process.env.WEBSITE_AUTH_ENABLED === 'true' && Boolean(process.env.AZURE_TENANT_ID);
   } catch { /* Readiness reports no infrastructure or credential details. */ }
-  const aiConfigured = process.env.AI_ENABLED === 'true' && Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL);
+  const ai = aiConfig();
+  const aiConfigured = ai.enabled === 'true' && Boolean(ai.key && ai.model);
   return jsonResponse({ status: database && authentication ? 'ready' : 'unavailable', database, authentication, aiConfigured }, database && authentication ? 200 : 503);
 }

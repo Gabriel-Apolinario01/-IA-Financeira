@@ -7,6 +7,7 @@ export interface Profile {
   initialObjective: string;
   onboardingDone: boolean;
   aiConsent: boolean;
+  groqConsent?: boolean;
   confirmedNoIncomeMonths: string[];
 }
 export interface Transaction {

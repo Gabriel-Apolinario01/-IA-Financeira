@@ -51,7 +51,7 @@ function existing<T extends { id: string }>(rows: T[], value: unknown, label: st
   return item;
 }
 function profileUpdate(profile: Profile, payload: Payload): Profile {
-  const allowed = new Set(['name', 'incomeType', 'expectedIncome', 'essentialExpenses', 'initialObjective', 'onboardingDone', 'aiConsent', 'confirmedNoIncomeMonths']);
+  const allowed = new Set(['name', 'incomeType', 'expectedIncome', 'essentialExpenses', 'initialObjective', 'onboardingDone', 'aiConsent', 'groqConsent', 'confirmedNoIncomeMonths']);
   for (const key of Object.keys(payload)) if (!allowed.has(key)) throw new Error('Campo de perfil desconhecido.');
   const updated = { ...profile };
   if ('name' in payload) updated.name = text(payload.name, 'Nome', 80, true);
@@ -60,6 +60,7 @@ function profileUpdate(profile: Profile, payload: Payload): Profile {
   if ('essentialExpenses' in payload) updated.essentialExpenses = nullableMoney(payload.essentialExpenses, 'Despesas essenciais');
   if ('initialObjective' in payload) updated.initialObjective = text(payload.initialObjective, 'Objetivo inicial', 300, true);
   if ('onboardingDone' in payload) updated.onboardingDone = boolean(payload.onboardingDone, 'Configuração inicial');
+  if ('groqConsent' in payload) updated.groqConsent = boolean(payload.groqConsent, 'Compartilhamento com a Groq');
   if ('aiConsent' in payload) updated.aiConsent = boolean(payload.aiConsent, 'Compartilhamento com IA');
   if ('confirmedNoIncomeMonths' in payload) {
     if (!Array.isArray(payload.confirmedNoIncomeMonths) || payload.confirmedNoIncomeMonths.length > 1000) throw new Error('Informe uma lista válida de meses sem receita.');

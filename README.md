@@ -63,3 +63,7 @@ npm audit --omit=dev --audit-level=high
 Os testes de integração iniciam PostgreSQL na porta local 55439, criam contas sintéticas e verificam senha, sessão, isolamento entre contas, CSRF, gravação, exclusão e logout. O processo encerra o banco; as pastas ignoradas em `.test-data/` são mantidas porque o Windows pode bloquear a remoção imediata. As dependências e binários de teste não são serviços de produção.
 
 Controles e limites das nove categorias estão em [OWASP LLM 2026](docs/OWASP-LLM-2026.md). Trata-se de implementação e evidências de teste do projeto, sem certificação OWASP ou promessa de ausência de vulnerabilidades.
+
+## Groq
+
+No ambiente privado do servidor, use `AI_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-20b`, `GROQ_API_KEY` e `AI_ENABLED=true`. A integração usa Chat Completions com JSON Schema estrito. A autorização anterior para a OpenAI não habilita o envio à Groq. O usuário pode ativar a opção correspondente em Configurações.

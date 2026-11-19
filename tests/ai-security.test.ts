@@ -65,3 +65,20 @@ test('LLM06: server usage reservation runs only with consent; exhausted budget p
   await assert.rejects(explainMonth(state(), '2026-11', 'reserva', limited, fetcher), /quota/);
   assert.equal(reservations, 1); assert.equal(calls, 0);
 });
+
+test('Groq exige autorização específica e aceita apenas seleção estrita concluída', async () => {
+  const value = state();
+  const groq = { ...config, provider: 'groq' as const };
+  let calls = 0;
+  const fetcher: typeof fetch = async (url, init) => {
+    calls++;
+    assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.equal(JSON.parse(String(init?.body)).response_format.json_schema.strict, true);
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ sourceIds: ['reserve'], metricKeys: [] }) } }] });
+  };
+  assert.equal((await explainMonth(value, '2026-11', 'reserva', groq, fetcher)).mode, 'rules');
+  assert.equal(calls, 0);
+  value.profile.groqConsent = true;
+  assert.equal((await explainMonth(value, '2026-11', 'reserva', groq, fetcher)).mode, 'assisted');
+  assert.equal(calls, 1);
+});

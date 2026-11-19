@@ -51,3 +51,7 @@ No modo e-mail, o portal não deve exigir login Microsoft antes de carregar a p�
 ## Limites operacionais
 
 O limitador de autenticação usa cotas globais e por e-mail anonimizado para não confiar em cabeçalhos de IP enviados pelo cliente. Isso é adequado para a demonstração acadêmica, mas pode negar temporariamente acesso a outros usuários sob ataque. WAF, política de recuperação/verificação de e-mail, backups com teste de restauração e monitoramento precisam ser configurados no ambiente de produção; não são garantidos pelo repositório.
+
+## Groq
+
+No ambiente privado do servidor, use `AI_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-20b`, `GROQ_API_KEY` e `AI_ENABLED=true`. A integração usa Chat Completions com JSON Schema estrito. A autorização anterior para a OpenAI não habilita o envio à Groq. O usuário pode ativar a opção correspondente em Configurações.
