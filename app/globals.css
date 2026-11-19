@@ -118,3 +118,9 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 .document-panel img,.document-panel iframe { display: block; width: 100%; max-height: 420px; object-fit: contain; margin: 1rem 0; }
 .document-panel iframe { height: 350px; }
 .document-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.financial-chat .checkbox,.financial-chat .chat-turn { margin: .75rem 0; }
+.financial-chat .chat-turn { border-top: 1px solid var(--border); padding: 1rem 0; overflow-wrap: anywhere; }
+.financial-chat .chat-turn p,.financial-chat .chat-turn ul { margin: .5rem 0; }
+.financial-chat form { display: grid; gap: .4rem; margin: 1rem 0; }
+.financial-chat form input { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
+.financial-chat form button { justify-self: start; }
