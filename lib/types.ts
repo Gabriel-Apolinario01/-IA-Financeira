@@ -18,6 +18,7 @@ export interface Transaction {
   nature?: TransactionNature;
   /** Confirmed original transaction for a refund; absence means pending reconciliation. */
   refundOf?: string;
+  note?: string;
   origin?: { batchId: string; line: number; externalId?: string; account: string; currency: 'BRL'; timezone: 'America/Sao_Paulo'; originalDescription: string };
   id: string; description: string; amount: number;
   type: 'income' | 'expense'; category: string; date: string;

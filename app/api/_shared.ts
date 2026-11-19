@@ -31,6 +31,15 @@ export async function jsonBody(request: Request, maxBytes = 32_768): Promise<Rec
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
     throw new RepositoryError(415, "Envie os dados no formato JSON.");
   }
+  const bytes = await boundedBody(request, maxBytes);
+  try {
+    const body: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("object required");
+    return body as Record<string, unknown>;
+  } catch { throw new RepositoryError(400, "O JSON enviado é inválido."); }
+}
+
+export async function boundedBody(request: Request, maxBytes: number, timeoutMs = 5_000): Promise<Uint8Array<ArrayBuffer>> {
   const length = Number(request.headers.get("content-length"));
   if (Number.isFinite(length) && length > maxBytes) throw new RepositoryError(413, "O conteúdo enviado é muito grande.");
   if (!request.body) throw new RepositoryError(400, "Envie os dados da alteração.");
@@ -42,7 +51,7 @@ export async function jsonBody(request: Request, maxBytes = 32_768): Promise<Rec
     timeout = setTimeout(() => {
       void reader.cancel();
       reject(new RepositoryError(408, "O envio demorou demais. Tente novamente."));
-    }, 5_000);
+    }, timeoutMs);
   });
   try {
     while (true) {
@@ -58,12 +67,10 @@ export async function jsonBody(request: Request, maxBytes = 32_768): Promise<Rec
     const bytes = new Uint8Array(received);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    const body: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("object required");
-    return body as Record<string, unknown>;
+    return bytes;
   } catch (error) {
     if (error instanceof RepositoryError) throw error;
-    throw new RepositoryError(400, "O JSON enviado é inválido.");
+    throw new RepositoryError(400, "Não foi possível receber o conteúdo.");
   } finally {
     clearTimeout(timeout);
     reader.releaseLock();

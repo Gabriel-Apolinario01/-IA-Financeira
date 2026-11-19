@@ -109,3 +109,12 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 
 .google-login-button{height:48px;width:100%;margin-top:12px;background:#fff;border-color:#dce3d7;color:#3d493d;font-size:13px}.google-login-button:hover{background:#f8faf6}.google-mark{width:18px;height:18px;flex-shrink:0}
 .login-provider-button{width:100%;min-height:48px;margin-top:12px;font-size:13px}.login-step-back{margin:0 0 18px}.login-card-copy strong{color:#435c37;font-weight:600}
+.document-panel fieldset { border: 0; min-width: 0; margin: 1rem 0 0; padding: 0; }
+.document-panel .document-review { border: 1px solid #ccd9cf; border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+.document-panel legend { font-weight: 600; }
+.document-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px),1fr)); gap: .8rem; margin: .8rem 0; }
+.document-fields label { display: grid; gap: .3rem; }
+.document-fields :is(input,select) { min-width: 0; width: 100%; }
+.document-panel img,.document-panel iframe { display: block; width: 100%; max-height: 420px; object-fit: contain; margin: 1rem 0; }
+.document-panel iframe { height: 350px; }
+.document-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }

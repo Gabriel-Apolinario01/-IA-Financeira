@@ -27,3 +27,8 @@ O teste `node --import tsx --test tests/document-reader.test.ts` passou nos quat
 ## PDF digital e digitalizado
 
 PDF.js lê o texto por página no subprocesso privado. Páginas sem texto suficiente são renderizadas em memória com até 2400 × 3200 pixels e passam pelo mesmo OCR. O leitor recusa mais de quatro páginas. Os testes em `tests/document-pdf.test.ts` passaram (2/2). Um PDF sintético misto produziu R$ 1.234,56 na página digital e R$ 71,98 na página composta exclusivamente por JPEG. O teste verifica a origem de cada texto. Outro PDF, de cinco páginas, foi rejeitado.
+## Revisão e confirmação
+
+Em Lançamentos, a conta autenticada pode selecionar um documento ou abrir o seletor de câmera. A rota `/api/document` exige sessão e mesma origem, limita o volume durante a leitura do corpo e aplica cota por proprietário. O texto original é mostrado separadamente das sugestões. Cada lançamento exige revisão, seleção e confirmação. Valores, datas, natureza, direção, categoria, situação e observações podem ser ajustados. O processamento usa OCR local exclusivamente.
+
+O comando `document.confirm` valida as linhas, reutiliza `transaction.save` e persiste a seleção em uma atualização atômica. A identidade por hash do arquivo e número da linha impede repetir o documento já lançado. Data e valor coincidentes em outro arquivo geram aviso. A conta sem comprovante de pagamento entra como prevista e afeta as pendências no dashboard. Três testes de interpretação e gravação passaram, incluindo recarga por JSON, duplicação, moeda estrangeira e rejeição integral de um lote inválido. O TypeScript passou com as rotas e a interface.

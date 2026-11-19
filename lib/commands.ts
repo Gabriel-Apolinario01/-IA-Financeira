@@ -75,7 +75,9 @@ function transaction(payload: Payload, prior?: Transaction): Transaction {
   const description = payload.category === 'apostas' && payload.type === 'expense'
     ? text(payload.description ?? '', 'Descrição', 160, true) || 'Gasto com apostas'
     : text(payload.description, 'Descrição');
+  const note = 'note' in payload ? text(payload.note, 'Observações', 300, true) : prior?.note;
   return { id: id(payload.id), description, amount: money(payload.amount, 'Valor do lançamento', false),
+    ...(note ? { note } : {}),
     ...(nature !== undefined ? { nature: validateTransactionNature(nature) } : {}),
     ...(refundOf !== undefined ? { refundOf } : {}),
     type: enumeration(payload.type, ['income', 'expense'], 'Tipo do lançamento'), category: category(payload.category), date: date(payload.date, 'Data do lançamento'),
@@ -126,6 +128,26 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
   const payload = object(request.payload, 'Dados enviados');
   let next: FinanceState = { ...state };
   switch (request.type) {
+    case 'document.confirm': {
+      if (typeof payload.hash !== 'string' || !/^[a-f0-9]{64}$/.test(payload.hash) ||
+          !Array.isArray(payload.rows) || !payload.rows.length || payload.rows.length > 40)
+        throw new Error('Seleção de documento inválida.');
+      const seen = new Set<number>();
+      for (const input of payload.rows) {
+        const row = object(input, 'Lançamento revisado');
+        if (typeof row.line !== 'number' || !Number.isInteger(row.line) || row.line < 1 || row.line > 40 || seen.has(row.line))
+          throw new Error('Revise a seleção de linhas do documento.');
+        seen.add(row.line);
+        const key = 'doc_' + payload.hash + '_' + row.line;
+        if (next.transactions.some(t => t.id === key)) throw new Error('Lançamento deste documento já adicionado.');
+        const nature = validateTransactionNature(row.nature);
+        if (nature === 'unidentified' || (nature === 'income' && row.type !== 'income') || (nature === 'expense' && row.type !== 'expense'))
+          throw new Error('Confirme a natureza e a direção do lançamento.');
+        const entry = transaction({ ...row, id: key, expenseKind: 'variable' });
+        next = applyCommand(next, { id: request.id as string, type: 'transaction.save', payload: { ...entry } });
+      }
+      break;
+    }
     case 'profile.update': {
       next.profile = profileUpdate(state.profile, payload);
       if (next.profile.confirmedNoIncomeMonths.some(value => state.transactions.some(item => budgetEffect(state,item).income > 0 && item.status === 'realized' && item.date.slice(0, 7) === value))) throw new Error('Este mês já possui receita recebida. Revise os lançamentos antes de confirmar ausência de renda.');

@@ -22,8 +22,8 @@ export async function readDocument(bytes: Buffer, mime: string): Promise<Documen
     return await new Promise<DocumentPage[]>((resolve, reject) => {
       const reader = spawn(process.execPath, ['--max-old-space-size=256', path.resolve('scripts/read-document.mjs'), mime], {
         stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
-        env: Object.fromEntries(['SystemRoot', 'PATH', 'TEMP', 'TMP', 'TMPDIR', 'LANG'].flatMap(key =>
-          process.env[key] ? [[key, process.env[key]!]] : [])),
+        env: { NODE_ENV: 'production', ...Object.fromEntries(['SystemRoot', 'PATH', 'TEMP', 'TMP', 'TMPDIR', 'LANG'].flatMap(key =>
+          process.env[key] ? [[key, process.env[key]!]] : [])) },
       });
       const timer = setTimeout(() => reader.kill('SIGKILL'), 45_000);
       const output: Buffer[] = [];
