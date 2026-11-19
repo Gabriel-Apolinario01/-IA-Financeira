@@ -10,7 +10,14 @@ export interface Profile {
   groqConsent?: boolean;
   confirmedNoIncomeMonths: string[];
 }
+/** Financial nature; separate from the existing cash direction in `type`. */
+export type TransactionNature = 'income' | 'expense' | 'transfer' | 'invoice_payment' | 'refund' | 'unidentified';
+
 export interface Transaction {
+  /** Optional for legacy records. Classification validation and accounting follow in a later increment. */
+  nature?: TransactionNature;
+  /** Confirmed original transaction for a refund; absence means pending reconciliation. */
+  refundOf?: string;
   origin?: { batchId: string; line: number; externalId?: string; account: string; currency: 'BRL'; timezone: 'America/Sao_Paulo'; originalDescription: string };
   id: string; description: string; amount: number;
   type: 'income' | 'expense'; category: string; date: string;
@@ -56,5 +63,6 @@ export const CATEGORIES = [
   { id: 'assinaturas', label: 'Assinaturas', color: '#9c87a5' },
   { id: 'trabalho', label: 'Custos do trabalho', color: '#93845d' },
   { id: 'dividas', label: 'Dívidas', color: '#ad7770' },
+  { id: 'apostas', label: 'Apostas (opcional)', color: '#8b7eaf' },
   { id: 'outros', label: 'Outros', color: '#89948c' },
 ] as const;

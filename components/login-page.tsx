@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @next/next/no-location-assign-relative-destination, @next/next/no-html-link-for-pages -- Reload the document across the authentication and demo boundary. */
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, ShieldCheck, Sprout } from "lucide-react";
 
@@ -31,6 +31,7 @@ export default function LoginPage({ emailEnabled, microsoftEnabled }: { emailEna
         return;
       }
       setPassword(""); setConfirmation("");
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Request a fresh document with the session cookie.
       window.location.assign('/?mode=account');
     } catch { setMessage("Não foi possível conectar. Confira sua conexão e tente novamente."); }
     finally { setPending(false); }
@@ -38,8 +39,8 @@ export default function LoginPage({ emailEnabled, microsoftEnabled }: { emailEna
 
   return <main className="login-page">
     <header className="login-nav">
-      <a href="/" className="login-brand" aria-label="IA Financeira, início"><span className="brand-mark"><Sprout size={23} strokeWidth={1.8} /></span><span>IA<span className="brand-light">Financeira</span></span></a>
-      <a href="/" className="text-link"><ArrowLeft size={16} /> Página inicial</a>
+      <Link href="/" prefetch={false} className="login-brand" aria-label="IA Financeira, início"><span className="brand-mark"><Sprout size={23} strokeWidth={1.8} /></span><span>IA<span className="brand-light">Financeira</span></span></Link>
+      <Link href="/" prefetch={false} className="text-link"><ArrowLeft size={16} /> Página inicial</Link>
     </header>
     <section className="login-layout">
       <div className="login-intro">
@@ -73,7 +74,7 @@ export default function LoginPage({ emailEnabled, microsoftEnabled }: { emailEna
         </> : <p className="login-card-copy">{microsoftEnabled ? 'Continue com sua conta Microsoft.' : 'O acesso por conta está em configuração. A demonstração continua disponível.'}</p>}
         {microsoftEnabled && <a className="button secondary login-provider-button" href="/.auth/login/aad?post_login_redirect_uri=%2F%3Fmode%3Daccount">Entrar com Microsoft</a>}
         {message && <p className="notice warning login-message" role="alert">{message}</p>}
-        <div className="login-preview"><span className="login-divider"><span>OU</span></span><p>Quer conhecer os recursos primeiro?</p><a className="button secondary login-preview-button" href="/?mode=demo">Acessar demonstração</a><small>Os exemplos são fictícios e ficam salvos somente neste navegador.</small></div>
+        <div className="login-preview"><span className="login-divider"><span>OU</span></span><p>Quer conhecer os recursos primeiro?</p><Link className="button secondary login-preview-button" href="/?mode=demo" prefetch={false}>Acessar demonstração</Link><small>Os exemplos são fictícios e ficam salvos somente neste navegador.</small></div>
       </div>
     </section>
     <footer className="login-footer"><span>IA Financeira</span><span>Organização financeira e educação, no seu ritmo.</span></footer>

@@ -3,6 +3,7 @@ import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { FinanceRepository, RepositoryError, type SqlGateway } from "../lib/repository";
 import type { Command } from "../lib/types";
+import { monthMetrics } from '../lib/finance';
 
 function database() {
   const db = new DatabaseSync(":memory:");
@@ -45,6 +46,159 @@ const debt = (id: string, transactionId: string): Command => ({ id: `debt-${id}`
   interestRate: null, interestUnit: "unknown", transactionId,
 } });
 const status = (code: number) => (error: unknown) => error instanceof RepositoryError && error.status === code;
+
+test('optional betting category is persisted by the server and remains isolated between owners', async () => {
+  const {db,gateway,repository}=database();
+  try {
+    const command=transaction('betting',1234);
+    command.payload.category='apostas'; command.payload.description=''; command.payload.nature='expense';
+    await execute(repository,'A',command,0);
+    const reloaded=await new FinanceRepository(gateway).get('A');
+    assert.equal(reloaded.state.transactions[0].description,'Gasto com apostas');
+    assert.equal(monthMetrics(reloaded.state,'2026-10').categoryExpenses.apostas,1234);
+    assert.equal((await repository.get('B')).state.transactions.length,0);
+    await assert.rejects(execute(repository,'B',{id:'remove',type:'transaction.delete',payload:{id:'betting'}},0),status(400));
+    assert.equal((await repository.get('A')).revision,1);
+  } finally {db.close();}
+});
+
+for (const source of ['tsv','ofx'] as const) {
+  test(`reviewed ${source} preserves nature and dashboard totals after repository reload`, async () => {
+    const {db,gateway,repository}=database();
+    try {
+      const content=source==='tsv'?'data\tdescricao\tvalor\n2026-10-06\tRenda ficticia\t3000,00\n2026-10-06\tCompra ficticia\t-500,00\n2026-10-06\tTransferencia ficticia\t-800,00':
+        '<OFX><STMTRS><CURDEF>BRL<BANKTRANLIST>'+[['3000.00','Renda'],['-500.00','Compra'],['-800.00','Transferencia']].map(([amount,memo],i)=>`<STMTTRN><DTPOSTED>20261006<TRNAMT>${amount}<FITID>fixture${i}<MEMO>${memo}</STMTTRN>`).join('')+'</BANKTRANLIST></STMTRS></OFX>';
+      const lines=source==='tsv'?[2,3,4]:[1,2,3];
+      const payload={name:`ficticio.${source}`,content,account:'Principal',locale:'br',accepted:lines,natures:Object.fromEntries(lines.map((line,i)=>[line,['income','expense','transfer'][i]]))};
+      await execute(repository,'A',{id:'fixture',type:'import.commit',payload},0);
+      const restored=await new FinanceRepository(gateway).get('A');
+      const metrics=monthMetrics(restored.state,'2026-10');
+      assert.equal(metrics.income,300000);assert.equal(metrics.expenses,50000);assert.equal(metrics.result,250000);assert.equal(metrics.cashResult,170000);
+      await assert.rejects(execute(repository,'A',{id:'again',type:'import.commit',payload},1),status(400));
+    } finally {db.close();}
+  });
+}
+
+test('reviewed CSV persists edited fields and consistent totals through partial imports, reload, undo and restore', async () => {
+  const { db, gateway, repository } = database();
+  try {
+    const content='data;descricao;valor\n2026-10-06;Entrada;3000,00\n2026-10-06;Compra;-200,00\n2026-10-06;Transferencia;-800,00\n2026-10-06;Fatura;-200,00\n2026-10-06;Estorno;50,00';
+    const payload={name:'revisao.csv',content,account:'Principal',locale:'br',accepted:[2,3,4,5],natures:{'2':'income','3':'expense','4':'transfer','5':'invoice_payment'},edits:{'3':{description:'Compra revisada',category:'lazer'}}};
+    const first=await execute(repository,'review',{id:'review1',type:'import.commit',payload},0);
+    const purchase=first.state.transactions.find(t=>t.description==='Compra revisada')!;
+    assert.equal(purchase.category,'lazer');assert.equal(purchase.origin?.originalDescription,'Compra');
+    assert.equal(monthMetrics(first.state,'2026-10').result,280000);
+    const refund={name:'revisao.csv',content,account:'Principal',locale:'br',accepted:[6],natures:{'6':'refund'},edits:{'6':{refundOf:purchase.id}}};
+    const second=await execute(repository,'review',{id:'review2',type:'import.commit',payload:refund},1);
+    const restored=await new FinanceRepository(gateway).get('review');
+    assert.deepEqual(restored.state,JSON.parse(JSON.stringify(second.state)));
+    assert.equal(monthMetrics(restored.state,'2026-10').expenses,15000);
+    assert.equal(monthMetrics(restored.state,'2026-10').categoryExpenses.lazer,15000);
+    await assert.rejects(execute(repository,'review',{id:'replay',type:'import.commit',payload:refund},2),status(400));
+    await assert.rejects(execute(repository,'review',{id:'undo-original',type:'import.revert',payload:{id:'review1'}},2),status(400));
+    const undone=await execute(repository,'review',{id:'undo-refund',type:'import.revert',payload:{id:'review2'}},2);
+    assert.equal(monthMetrics(undone.state,'2026-10').expenses,20000);
+    const redone=await execute(repository,'review',{id:'restore-refund',type:'import.restore',payload:{id:'review2'}},3);
+    assert.equal(monthMetrics(redone.state,'2026-10').expenses,15000);
+    assert.equal((await repository.get('other-user')).state.transactions.length,0);
+    assert.equal((await repository.export('review')).state.transactions.length,5);
+  } finally { db.close(); }
+});
+
+test('review edits reject reserved fields, invalid categories and unlinked refunds atomically', async () => {
+  const { db, repository } = database();
+  try {
+    const payload={name:'a.csv',account:'Principal',locale:'br',content:'data;descricao;valor\n2026-10-06;Teste;12,34',accepted:[2],natures:{'2':'income'}};
+    for (const edits of [{'2':{origin:{ownerId:'victim'}}},{'2':{category:'invalid'}},{'2':{description:''}},{'3':{description:'extra'}}]) {
+      await assert.rejects(execute(repository,'A',{id:'invalid',type:'import.commit',payload:{...payload,edits}},0),status(400));
+      assert.equal((await repository.get('A')).revision,0);
+    }
+    await assert.rejects(execute(repository,'A',{id:'refund',type:'import.commit',payload:{...payload,natures:{'2':'refund'}}},0),status(400));
+  } finally { db.close(); }
+});
+
+for (const nature of ['income', 'expense', 'transfer', 'invoice_payment', 'refund', 'unidentified'] as const) {
+  test(`server persists and reloads the valid nature ${nature}`, async () => {
+    const { db, gateway, repository } = database();
+    try {
+      const command = transaction('nature'); command.payload.nature = nature;
+      await execute(repository, 'A', command, 0);
+      const restored = await new FinanceRepository(gateway).get('A');
+      assert.equal(restored.state.transactions[0].nature, nature);
+      const exported = JSON.parse(JSON.stringify(await repository.export('A')));
+      assert.equal(exported.state.transactions[0].nature, nature);
+    } finally { db.close(); }
+  });
+}
+
+test('server rejects invalid nature values without changing the persisted revision', async () => {
+  const { db, repository } = database();
+  try {
+    await execute(repository, 'A', transaction('legacy'), 0);
+    for (const nature of ['invalid-secret-value', null, undefined, 42, true, [], {}, { type:'income' }]) {
+      const command = transaction('invalid'); command.payload.nature = nature;
+      await assert.rejects(execute(repository, 'A', command, 1), error =>
+        error instanceof RepositoryError && error.status === 400 && error.message === 'Natureza financeira inválida.');
+    }
+    const snapshot = await repository.get('A');
+    assert.equal(snapshot.revision, 1);
+    assert.equal(snapshot.state.transactions.length, 1);
+    assert.equal(Object.hasOwn(snapshot.state.transactions[0], 'nature'), false);
+  } finally { db.close(); }
+});
+
+test('updates preserve nature for older clients while legacy records stay unclassified', async () => {
+  const { db, repository } = database();
+  try {
+    await execute(repository, 'A', transaction('legacy'), 0);
+    const legacyEdit = transaction('legacy', 100); legacyEdit.id = 'edit-legacy';
+    await execute(repository, 'A', legacyEdit, 1);
+    assert.equal(Object.hasOwn((await repository.get('A')).state.transactions[0], 'nature'), false);
+    const classify = transaction('legacy', 100); classify.id = 'classify'; classify.payload.nature = 'transfer';
+    await execute(repository, 'A', classify, 2);
+    const oldClientEdit = transaction('legacy', 200); oldClientEdit.id = 'edit-classified';
+    await execute(repository, 'A', oldClientEdit, 3);
+    assert.equal((await repository.get('A')).state.transactions[0].nature, 'transfer');
+    const reclassify = transaction('legacy', 200); reclassify.id = 'reclassify'; reclassify.payload.nature = 'expense';
+    await execute(repository, 'A', reclassify, 4);
+    assert.equal((await repository.get('A')).state.transactions[0].nature, 'expense');
+  } finally { db.close(); }
+});
+
+test('unknown transaction fields cannot set internal provenance or another owner', async () => {
+  const { db, repository } = database();
+  try {
+    const command = transaction('safe');
+    Object.assign(command.payload, JSON.parse('{"nature":"expense","origin":{"batchId":"forged"},"ownerId":"victim","revision":999,"__proto__":{"nature":"refund"}}'));
+    await execute(repository, 'A', command, 0);
+    const saved = (await repository.get('A')).state.transactions[0];
+    assert.equal(saved.nature, 'expense');
+    assert.equal(Object.hasOwn(saved, 'origin'), false);
+    assert.equal(Object.hasOwn(saved, 'ownerId'), false);
+    assert.equal(Object.hasOwn(saved, '__proto__'), false);
+    assert.equal((await repository.get('victim')).state.transactions.length, 0);
+  } finally { db.close(); }
+});
+
+test('reviewed import validates selected natures at the server boundary and persists valid ones', async () => {
+  const { db, repository } = database();
+  try {
+    const command: Command = { id:'reviewed', type:'import.commit', payload:{
+      name:'reviewed.csv', account:'Principal', locale:'br',
+      content:'data;descricao;valor\n2026-10-29;Compra;-12,34', accepted:[2],
+    } };
+    for (const natures of [null, [], {}, {'2':'unidentified'}, {'2':'invalid'}, {'2':123}, {'3':'expense'}]) {
+      await assert.rejects(execute(repository, 'A', {...command,payload:{...command.payload,natures}},0),status(400));
+      assert.equal((await repository.get('A')).revision, 0);
+    }
+    command.payload.natures = {'2':'transfer'};
+    const saved = await execute(repository, 'A', command, 0);
+    assert.equal(saved.state.transactions[0].nature, 'transfer');
+    assert.equal(saved.state.importBatches![0].transactions[0].nature, 'transfer');
+    assert.equal(JSON.parse(JSON.stringify(await repository.export('A'))).state.transactions[0].nature, 'transfer');
+    await assert.rejects(execute(repository,'victim',{id:'undo',type:'import.revert',payload:{id:'reviewed'}},0),status(400));
+  } finally { db.close(); }
+});
 
 test('imports are atomic, durable, isolated and safe on concurrent retries', async () => {
   const { db, repository } = database();
@@ -212,6 +366,9 @@ test("rate limits are atomic, separated by owner and bucket, and reset next wind
     await assert.rejects(repository.consumeRate("A", "diagnosis", 3), status(429));
     await repository.consumeRate("B", "diagnosis", 3);
     await repository.consumeRate("A", "command", 3);
+    await repository.consumeRate("A", "import-classification", 1);
+    await assert.rejects(repository.consumeRate("A", "import-classification", 1), status(429));
+    await repository.consumeRate("B", "import-classification", 1);
     time += 60_000;
     await repository.consumeRate("A", "diagnosis", 3);
   } finally { db.close(); }

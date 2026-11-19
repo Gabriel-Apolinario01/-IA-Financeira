@@ -1,5 +1,5 @@
 import type { FinanceState } from './types';
-import { monthMetrics, formatMoney, savingSuggestions } from './finance';
+import { bettingSummary, monthMetrics, formatMoney, savingSuggestions } from './finance';
 
 export type EducationItem = { id: string; title: string; theme: string; summary: string; example: string; sourceTitle: string; url: string; consultedAt: string; keywords: string[] };
 // Curated summaries, not remote instructions. Only these identifiers can generate a source link.
@@ -28,7 +28,12 @@ export function answerEducation(state: FinanceState, month: string, question: st
   const metrics=monthMetrics(state,month);
   const sources=retrieveEducation(question);
   const partial=metrics.incomplete?'Os registros estão incompletos: ausência de receita cadastrada não comprova renda zero.':'';
-  const summary=`Entradas realizadas: ${formatMoney(metrics.income)}. Despesas realizadas: ${formatMoney(metrics.expenses)}. Resultado do mês: ${formatMoney(metrics.result)}. Projeção com pendências: ${formatMoney(metrics.projection)}.`;
+  const commitment=metrics.commitment.percent === null
+    ? metrics.commitment.status === 'zero' ? 'Percentual indisponível: renda reconhecida igual a zero.' : 'Renda não informada para o período; percentual indisponível.'
+    : `Comprometimento realizado da renda: ${metrics.commitment.percent.toLocaleString('pt-BR',{maximumFractionDigits:2})}%.`;
+  const betting=bettingSummary(state,month);
+  const categorized=betting.records>0 ? ` Consumo líquido na categoria opcional de apostas: ${formatMoney(betting.amount)}, já incluído no consumo total. O registro não comprova prejuízo líquido em apostas.` : '';
+  const summary=`Receitas reconhecidas: ${formatMoney(metrics.income)}. Consumo líquido reconhecido: ${formatMoney(metrics.expenses)}. Resultado do mês: ${formatMoney(metrics.result)}. Projeção com pendências: ${formatMoney(metrics.projection)}. Movimentações aguardando revisão: ${metrics.pendingReview}. ${commitment}${categorized}`;
   const insights=[partial,metrics.result<0?`As despesas realizadas superam as entradas registradas em ${formatMoney(-metrics.result)}. Reveja os registros e compromissos antes de planejar aportes.`:'O resultado do mês não é saldo bancário nem garantia de dinheiro disponível.',metrics.pendingExpenses>0?`${formatMoney(metrics.pendingExpenses)} em despesas previstas ainda estão pendentes neste mês.`:''].filter(Boolean).slice(0,3);
   const actions=metrics.incomplete?['Registre as receitas do período ou confirme que não houve receita.']:savingSuggestions(state,month).map(x=>x.reason).slice(0,3);
   return {mode:'rules' as const,month,summary,metrics,insights,actions,answer:sources.length?sources.map(s=>s.summary).join(' '):'A base revisada não sustenta uma resposta a essa pergunta. Você pode perguntar sobre orçamento, dívidas, reserva, juros, inflação, risco, liquidez ou diversificação.',sources:sources.map(({id,title,sourceTitle,url,consultedAt})=>({id,title,sourceTitle,url,consultedAt})),limitations:[partial,'Registros informados por você; sem consulta a bancos. Não há recomendação de ativos.'].filter(Boolean),generatedAt:new Date().toISOString(),aiAvailable:false};
