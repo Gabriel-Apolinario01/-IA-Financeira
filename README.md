@@ -1,6 +1,6 @@
 # IA Financeira
 
-Aplicação Next.js para organização financeira e educação: lançamentos, orçamento, metas, reserva, dívidas, importação CSV/OFX e explicações baseadas em conteúdo revisado. Não conecta contas bancárias nem movimenta dinheiro.
+Aplicação Next.js para lançamentos financeiros, orçamento, metas, dívidas e educação. Aceita extratos CSV, TSV e OFX, fotos e PDFs de documentos brasileiros. A aba Aprender reúne guias, simuladores e chat educativo. [Relatório da entrega e evidências](docs/PROGRESSO-FINAL.md)
 
 ## Executar com cadastro, login e banco real local
 
@@ -28,14 +28,15 @@ Abra **http://localhost:5174/login**, escolha **Ainda não tenho conta — cadas
 
 ## Inteligência artificial
 
-A IA organiza trechos educativos revisados; os cálculos permanecem determinísticos no aplicativo. A chamada usa a Responses API da OpenAI, com JSON Schema estrito. O servidor valida novamente os IDs recebidos e exibe apenas os textos/fontes locais autorizados. O modelo não recebe ferramentas de escrita, SQL, senhas, nomes, descrições ou a pergunta bruta.
+O diagnóstico organiza trechos educativos revisados e admite OpenAI ou Groq. O chat em **Aprender → Chat financeiro** gera parágrafos livres com a Groq quando há configuração e autorização. Cada pergunta tem até 600 caracteres. A interface apresenta as métricas calculadas pelo aplicativo e identifica respostas educativas locais. O histórico recente e as métricas têm autorizações próprias. A seção de documentos em **Lançamentos** funciona por OCR em português mesmo com todas as integrações externas desligadas.
 
 Em `.env.local` ou nas variáveis privadas do App Service:
 
 ```dotenv
 AI_ENABLED=true
-OPENAI_API_KEY=<segredo privado>
-OPENAI_MODEL=<modelo disponível com Responses API e JSON Schema estrito>
+AI_PROVIDER=groq
+GROQ_API_KEY=<chave privada>
+GROQ_MODEL=openai/gpt-oss-20b
 AI_GLOBAL_DAILY_LIMIT=200
 ```
 
@@ -47,7 +48,7 @@ Depois, na conta, habilite o consentimento em **Configurações** e solicite uma
 
 Siga [o roteiro de publicação](docs/DEPLOYMENT.md). Login online requer PostgreSQL, URL pública e segredo de sessão configurados no App Service. A IA também requer chave, modelo e faturamento disponíveis no provedor. A existência de código ou um build bem-sucedido não comprova essas configurações.
 
-O workflow testa pull requests e só publica `main`. Usa `npm ci`, ações fixadas por commit e auditoria das dependências de produção. Nenhuma credencial deve ser enviada ao GitHub em arquivos ou incorporada em variáveis `NEXT_PUBLIC_*`.
+O workflow testa pull requests. A publicação exige disparo manual na `main` com a opção de produção selecionada e todas as verificações aprovadas. Usa `npm ci`, ações fixadas por commit e auditoria das dependências de produção. As chaves pertencem ao ambiente privado do servidor.
 
 ## Verificação
 

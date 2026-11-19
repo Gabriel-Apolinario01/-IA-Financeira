@@ -44,4 +44,41 @@ O adaptador opcional de visão exige `DOCUMENT_VISION_ENABLED=true`, `GROQ_VISIO
 
 No build local, os testes de navegador passaram em Edge desktop (1360 × 960) e celular emulado (390 × 844). Em cada jornada, a conta de energia foi reconhecida como prevista, corrigida e confirmada como realizada pelo usuário fictício. O reenvio do mesmo arquivo ficou bloqueado. O cupom digital de R$ 20,00 foi visualizado e confirmado. Uma terceira leitura recuperou R$ 182,34 de um PDF inteiramente digitalizado e ficou na prévia. O dashboard permaneceu com R$ 202,34 de consumo após a recarga e o novo login. Duas perguntas sobre moradia mantiveram o assunto no modo local.
 
-Com o lockfile final, a instalação reproduzível instalou 631 pacotes. Lint, typecheck, build e 171 testes unitários passaram. O teste integrado passou em PostgreSQL real com duas contas fictícias, verificando a rota de extração, repetição de confirmação, isolamento, chat e revisão persistida. A auditoria de runtime reportou zero vulnerabilidades. O modelo de visão foi testado com respostas simuladas. A validação externa da Groq fica pendente por decisão do usuário.
+Com o lockfile final, a instalação reproduzível instalou 631 pacotes. Lint, typecheck, build e 171 testes unitários passaram. O teste integrado passou em PostgreSQL real com duas contas fictícias, verificando a rota de extração, repetição de confirmação, isolamento, chat e revisão persistida. A auditoria de runtime reportou zero vulnerabilidades. O adaptador de visão foi testado com respostas simuladas.
+
+## Validação externa condicionada a custo zero
+
+O usuário autorizou até duas gerações reais de texto, com dados fictícios e somente na cota gratuita. Na verificação de 19/11/2026, o processo local não tinha `GROQ_API_KEY` e o projeto não tinha `.env.local`. O plano da organização e a disponibilidade da cota gratuita para esse modelo ainda precisam ser confirmados. Nenhuma requisição de inferência foi enviada. A autorização é específica para o chat.
+
+| Chamada externa | Estado | Verificação local correspondente |
+| --- | --- | --- |
+| 1. Perguntar pelo gasto em moradia | Pendente de chave e cota gratuita confirmada | HTTP 200 em desktop e celular. A interface exibiu R$ 182,34 em moradia e R$ 202,34 em consumo total. |
+| 2. Retomar o assunto da primeira pergunta | Pendente dos mesmos requisitos | HTTP 200 nos dois tamanhos. A resposta local retomou a categoria moradia. Estado financeiro, revisão e geração da conta foram idênticos antes e depois da conversa. |
+
+A documentação lista o plano Free e descreve a cobrança do Developer por uso. A disponibilidade comercial de modelos varia por organização. O modelo de texto previsto é `openai/gpt-oss-20b`. O reconhecimento de imagens comprovado nesta entrega usa Tesseract em português. A Groq documenta `qwen/qwen3.8-27b` para visão, mas a disponibilidade para esta conta não foi verificada. [Faturamento Groq](https://console.groq.com/docs/billing-faqs) · [Visão Groq](https://console.groq.com/docs/vision)
+
+## Evidências para apresentação
+
+| Etapa | Evidência sintética |
+| --- | --- |
+| Foto e resultado de OCR | [Conta de energia](evidencias-final/conta-sintetica.jpg) · [Texto e campos extraídos](evidencias-final/desktop-extracao.json) |
+| PDF digital e digitalização | [Cupom digital](evidencias-final/cupom-sintetico.pdf) · [Prévia renderizada](evidencias-final/desktop-pdf.png) · [PDF digitalizado](evidencias-final/conta-digitalizada.pdf) · [Resultado do OCR](evidencias-final/desktop-pdf-digitalizado.json) |
+| Revisão e confirmação | [Desktop](evidencias-final/desktop-revisao.png) · [Celular emulado](evidencias-final/celular-revisao.png) · [Lançamento registrado](evidencias-final/desktop-lancamento.png) |
+| Efeito financeiro | [Dashboard](evidencias-final/desktop-dashboard.png) · [Dashboard móvel](evidencias-final/celular-dashboard.png) |
+| Chat em duas telas | [Desktop](evidencias-final/desktop-chat.png) · [Celular](evidencias-final/celular-chat.png) · [Perguntas, fatos e texto exibido](evidencias-final/desktop-respostas.json) · [Resultados das jornadas](evidencias-final/navegador.json) |
+| Verificação técnica | [Unitários](evidencias-final/unit.txt) · [PostgreSQL](evidencias-final/integration.txt) · [Build](evidencias-final/build.txt) · [TypeScript](evidencias-final/typecheck.txt) · [Lint](evidencias-final/lint.txt) · [Auditoria](evidencias-final/audit.txt) |
+
+Para repetir as jornadas locais com dados fictícios, inicie o build local em localhost:5174 pelo script `dev:local -- --production`. Use `node scripts/verify-final-browser.mjs` com o Edge instalado. O script cria duas contas de teste no banco local. As duas respostas são verificadas na tela e comparadas aos totais esperados. A validação externa é uma execução separada de desktop com `--groq-free-test`, depois de verificar as condições da autorização. Esse modo exige que a API declare origem Groq, verifica os parágrafos exibidos, o valor e a retomada do assunto pelo texto gerado. O teste interrompe o fluxo em caso de falha, sem tentar uma terceira pergunta.
+
+As evidências de celular usam emulação de viewport com toque. A câmera física e documentos reais de bancos ou concessionárias não foram utilizados. A extração exige revisão humana para layouts ambíguos, páginas de continuação, documentos manuscritos ou digitalizações de baixa qualidade. Fórmulas, credenciais e disponibilidade de produção não foram verificadas no Azure.
+
+## Histórico da entrega local
+
+| Commit | Etapa |
+| --- | --- |
+| `baa008b` | Integração das duas branches |
+| `fca9177` | Fotos e OCR |
+| `8f54f08` | Documentos PDF |
+| `fef7481` | Revisão e gravação |
+| `1a4d684` | Chat conversacional |
+| `1c4bd8c` | Segurança, regressão e jornadas em navegador |

@@ -1,0 +1,2 @@
+npm notice run ia-financeira-azure@0.1.0 lint
+npm notice run eslint . --ignore-pattern .next --ignore-pattern .azure-data

@@ -9,6 +9,7 @@ import path from 'node:path';
 
 const base = 'http://localhost:5174';
 const output = path.resolve(process.argv[2] || 'outputs/entrega-final');
+const verifyGroq = process.argv.includes('--groq-free-test');
 await mkdir(output,{recursive:true});
 const jpeg = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="500"><rect width="100%" height="100%" fill="white"/><g font-family="Arial" fill="black"><text x="55" y="80" font-size="40">CONTA DE ENERGIA</text><text x="55" y="160" font-size="32">Emissor: Luz Exemplo</text><text x="55" y="235" font-size="32">Total R$ 182,34</text><text x="55" y="310" font-size="32">Vencimento 25/11/2026</text><text x="55" y="410" font-size="22">DOCUMENTO FICTICIO PARA TESTES</text></g></svg>')).jpeg().toBuffer();
 await writeFile(path.join(output,'conta-sintetica.jpg'),jpeg);
@@ -24,7 +25,8 @@ await writeFile(path.join(output,'conta-digitalizada.pdf'),scan);
 const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL || 'msedge',headless:true});
 const results=[];
 try {
-  for (const [device,width,height] of [['desktop',1360,960],['celular',390,844]]) {
+  const devices = verifyGroq ? [['desktop',1360,960]] : [['desktop',1360,960],['celular',390,844]];
+  for (const [device,width,height] of devices) {
     const context=await browser.newContext({viewport:{width,height},locale:'pt-BR',isMobile:device==='celular',hasTouch:device==='celular'});
     const page=await context.newPage();
     page.setDefaultTimeout(15_000);
@@ -83,13 +85,41 @@ try {
       await page.locator('.summary-number').filter({hasText:/202,34/}).waitFor();
       await screenshot('dashboard');
       await button('Aprender').click();await page.getByRole('tab',{name:'Chat financeiro'}).click();
+      if (verifyGroq) await page.getByLabel(/Autorizar a Groq a receber/).check();
       await page.getByLabel(/Usar os totais do mês/).check();
+      const getSnapshot=async () => {
+        const response=await context.request.get(base+'/api/state');assert.equal(response.status(),200);
+        const {state,revision,generation}=await response.json();
+        return {state,revision,generation};
+      };
+      const beforeChat=await getSnapshot();
+      const calls=[];
+      let requests=0;
+      await page.route('**/api/chat',async route=>{
+        if (++requests>2) return route.abort();
+        return route.continue();
+      });
       const ask=async (text,index) => {
+        const reply=page.waitForResponse(r=>r.url()===base+'/api/chat',{timeout:25_000});
         await page.getByLabel('Sua pergunta',{exact:true}).fill(text);
         await page.getByLabel('Sua pergunta',{exact:true}).press('Enter');
+        const response=await reply;
+        assert.equal(response.status(),200);
+        const answer=await response.json();
         await page.locator('.chat-turn').nth(index).waitFor();
+        const displayed=await page.locator('.chat-turn').nth(index).innerText();
+        calls.push({question:text,http:response.status(),mode:answer.mode,paragraphs:answer.paragraphs,facts:answer.facts,displayed});
+        await writeFile(path.join(output,device+'-respostas.json'),JSON.stringify(calls,null,2));
+        assert.equal(answer.mode,verifyGroq?'groq':'local');
+        for(const p of [...answer.paragraphs,...answer.facts]) assert.ok(displayed.replaceAll('\u00a0',' ').includes(p.replaceAll('\u00a0',' ')));
+        assert.ok(answer.facts.some(f=>/Moradia.*182,34/i.test(f)));
+        return answer;
       };
-      await ask('Quanto gastei em moradia?',0);await ask('E como posso diminuir esses gastos?',1);
+      await ask('Quero reduzir a conta de energia. Quanto gastei em moradia?',0);
+      const followup=await ask(verifyGroq?'Qual despesa eu mencionei antes e o que posso fazer para reduzi-la?':'E como posso diminuir esses gastos?',1);
+      if (verifyGroq) assert.match(followup.paragraphs.join(' '),/energia|el[eé]tric|conta de luz/i);
+      assert.equal(requests,2);
+      assert.deepEqual(await getSnapshot(),beforeChat);
       assert.match(await page.locator('.chat-turn').nth(1).innerText(),/Moradia/i);
       await screenshot('chat',page.locator('.financial-chat'));
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth <= document.documentElement.clientWidth+1));
@@ -98,7 +128,7 @@ try {
       await page.goto(base+'/login');
       await page.getByLabel('Seu e-mail').fill(email);await page.getByLabel('Senha',{exact:true}).fill(password);
       await button('Entrar').click();await page.locator('.summary-number').filter({hasText:/202,34/}).waitFor();
-      results.push({device,width,height,ocr:energy.pages[0].method,pdf:receipt.pages[0].method,confirmed:2,expenseCents:20234,chat:'local',questions:2,loginAgain:true});
+      results.push({device,width,height,ocr:energy.pages[0].method,pdf:receipt.pages[0].method,scannedPdf:scanned.pages[0].method,confirmed:2,expenseCents:20234,chat:verifyGroq?'groq':'local',questions:requests,financialStateUnchangedByChat:true,loginAgain:true});
       console.log(device+' aprovado');
     } catch(error) {
       await screenshot('falha');
