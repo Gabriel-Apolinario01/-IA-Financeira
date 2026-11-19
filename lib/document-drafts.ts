@@ -6,7 +6,7 @@ export interface DocumentDraft {
   line: number; page: number; kind: string; issuer: string; description: string;
   amount: number | null; currency: 'BRL' | null; date: string; dueDate: string; paidDate: string;
   category: string; nature: NonNullable<Transaction['nature']>; direction: Transaction['type'];
-  status: Transaction['status']; warnings: string[];
+  status: Transaction['status']; warnings: string[]; ambiguities: string[];
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -20,8 +20,11 @@ function amounts(lines: string[]) {
     catch { return []; }
   })))];
 }
+function distinctDates(lines: string[]) {
+  return new Set(lines.flatMap(line => [...line.matchAll(datePattern)].map(m => [m[3], m[2], m[1]].join('-'))).filter(isValidDate));
+}
 function dateFrom(lines: string[]) {
-  const dates = new Set(lines.flatMap(line => [...line.matchAll(datePattern)].map(m => [m[3], m[2], m[1]].join('-'))).filter(isValidDate));
+  const dates = distinctDates(lines);
   return dates.size === 1 ? [...dates][0] : '';
 }
 
@@ -37,14 +40,16 @@ function interpret(lines: string[], page: number, line: number): DocumentDraft {
   const issuer = issuerLine?.replace(/^[^:\-]*[:\-]\s*/, '').slice(0, 100) ?? '';
   const totalLines = folded.filter(s => totals.test(s) && !/\b(?:subtotal|troco|desconto|tributos|itens|produtos|juros|multa|minimo)\b/.test(s));
   const candidates = amounts(totalLines.length ? totalLines : folded);
-  const currency = /\b(?:usd|eur|dolar|euro)\b|us\$|€/.test(text) ? null : 'BRL';
+  const currency = /\b(?:usd|eur|gbp|ars|dolar|euro)\b|(?<!r)\$|[€£¥]/.test(text) || !/(?:r\$|\bbrl\b|\breais\b)/.test(text) ? null : 'BRL';
   const amount = candidates.length === 1 && currency ? candidates[0] : null;
-  const dueDate = dateFrom(folded.filter(s => /\bvenc(?:imento|\.)?\b/.test(s)));
+  const dueLines = folded.filter(s => /\bvenc(?:imento|\.)?\b/.test(s));
+  const dueDate = dateFrom(dueLines);
   const paidLines = folded.filter(s => /\b(?:pag[oa] em|data (?:do |de )?pagamento|efetivad[oa] em|liquidad[oa] em)\b/.test(s));
   const negative = /\b(?:nao pag[oa]|nao comprovad[oa]|agendad[oa]|pendente|a confirmar|nao efetuad[oa]|cancelad[oa])\b/.test(text);
   const paymentEvidence = !negative && (/\b(?:pagamento (?:realizado|efetuado|confirmado)|pix (?:enviado|recebido|efetivado)|valor pago|pago em|liquidado em)\b/.test(text) || (kind.startsWith('Comprovante') && paidLines.length > 0));
   const paidDate = paymentEvidence ? dateFrom(paidLines) : '';
-  const issueDate = dateFrom(folded.filter(s => !/\bvenc|pagamento previsto|agendad/.test(s)));
+  const issueLines = folded.filter(s => !/\bvenc|pagamento previsto|agendad/.test(s) && !paidLines.includes(s));
+  const issueDate = dateFrom(issueLines);
   const date = paymentEvidence ? paidDate || issueDate : dueDate || issueDate;
   const household = kind === 'Conta de energia' || kind === 'Conta de água';
   const description = (issuer ? kind + ' — ' + issuer : kind === 'Documento' ? lines[0] || '' : kind).slice(0, 160);
@@ -53,6 +58,13 @@ function interpret(lines: string[], page: number, line: number): DocumentDraft {
     : /\bentre contas proprias\b/.test(text) ? 'transfer'
     : kind === 'Documento' || kind === 'Comprovante PIX' || kind === 'Fatura' ? 'unidentified' : 'expense';
   const warnings = [];
+  const ambiguities = [];
+  if (candidates.length > 1) ambiguities.push('Há mais de um valor total.');
+  if (!candidates.length) ambiguities.push('Valor total ausente.');
+  if (!currency) ambiguities.push('Moeda em reais sem identificação inequívoca.');
+  if (!dueDate && (household || kind === 'Boleto' || kind === 'Fatura')) ambiguities.push('Vencimento sem identificação inequívoca.');
+  if ([issueLines, paidLines, dueLines].some(group => distinctDates(group).size > 1)) ambiguities.push('Datas conflitantes para o mesmo campo.');
+  if (!date) ambiguities.push('Data do lançamento ausente ou ambígua.');
   if (!amount) warnings.push('Confira a moeda e informe um único valor total em reais.');
   if (!date) warnings.push('Informe a data do lançamento.');
   if (nature === 'unidentified') warnings.push('Escolha a natureza e confira a direção do dinheiro.');
@@ -60,7 +72,7 @@ function interpret(lines: string[], page: number, line: number): DocumentDraft {
   return { line, page, kind, issuer, currency, description, amount, date, dueDate, paidDate,
     category: household ? 'moradia' : suggestion.category ?? 'outros', nature,
     direction: /\bpix recebido\b/.test(text) ? 'income' : 'expense',
-    status: paymentEvidence ? 'realized' : 'planned', warnings };
+    status: paymentEvidence ? 'realized' : 'planned', warnings, ambiguities };
 }
 
 export function documentDrafts(pages: { text: string }[]) {

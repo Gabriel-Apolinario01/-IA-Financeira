@@ -7,7 +7,9 @@ import type { DocumentDraft } from '../lib/document-drafts';
 
 const natures = { unidentified: 'Escolha a natureza', expense: 'Despesa', income: 'Receita', transfer: 'Transferência', invoice_payment: 'Pagamento de fatura', refund: 'Estorno' };
 type Review = DocumentDraft & { value: string; note: string; selected: boolean };
-type Result = { hash: string; pages: {method:'text'|'ocr'|'vision';text:string}[]; rows: DocumentDraft[] };
+type Offer = { page: number; token: string };
+type Comparison = { page: number; text: string; rows: DocumentDraft[] };
+type Result = { hash: string; pages: {method:'text'|'ocr'|'mixed';text:string}[]; rows: DocumentDraft[]; offers: Offer[] };
 type Props = { state: FinanceState; pending: boolean; account: boolean; vision: boolean;
   send: (type: string, payload: Record<string, unknown>, id?: string) => Promise<FinanceState> };
 
@@ -16,7 +18,7 @@ function cents(value: string) {
 }
 
 export function DocumentPanel({ state, account, pending, send, vision }: Props) {
-  const [consent,setConsent] = useState(false);
+  const [comparisons,setComparisons] = useState<Comparison[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [images,setImages] = useState<string[]>([]);
   const [url, setUrl] = useState('');
@@ -34,7 +36,7 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
     return () => URL.revokeObjectURL(preview);
   }, [file]);
   function choose(input?: File) {
-    setConsent(false);
+    setComparisons([]);
     setImages([]);
     setNotice(''); setResult(null); setRows([]); setFile(null); setUrl('');
     if (!input) return;
@@ -57,17 +59,33 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
   async function extract() {
     if (!file || locked.current) return;
     locked.current = true; setBusy(true); setNotice('');
-    setConsent(false);
     try {
-      const response = await fetch('/api/document', { method: 'POST', headers: { 'Content-Type': file.type, ...(consent && vision ? {'x-document-vision-consent':'once'} : {}) },
+      const response = await fetch('/api/document', { method: 'POST', headers: { 'Content-Type': file.type },
         body: file, signal: AbortSignal.timeout(65_000) });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Falha ao ler o documento.');
       const preview = data as Result;
-      setResult(preview); setRows(preview.rows.map(r => ({ ...r, value: r.amount ? formatMoney(r.amount) : '', note: '', selected: false })));
-      commandId.current = crypto.randomUUID();
+      setResult(preview);
+      if (result?.hash !== preview.hash) {
+        setRows(preview.rows.map(r => ({ ...r, value: r.amount ? formatMoney(r.amount) : '', note: '', selected: false })));
+        commandId.current = crypto.randomUUID();
+      }
     } catch (e) { setNotice(e instanceof Error ? e.message : 'Falha ao ler o documento.'); }
     finally { setBusy(false); locked.current = false; }
+  }
+  async function compare(offer: Offer) {
+    if (!file || !vision || locked.current) return;
+    locked.current = true; setBusy(true); setNotice('');
+    setResult(current => current && ({...current,offers:current.offers.filter(item => item.token !== offer.token)}));
+    try {
+      const response = await fetch('/api/document', { method:'POST', headers:{
+        'Content-Type':file.type,'x-document-vision-consent':'once','x-document-offer':offer.token,
+      },body:file,signal:AbortSignal.timeout(65_000) });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || 'Groq indisponível. Continue com a leitura local.');
+      setComparisons(previous => [...previous.filter(item => item.page !== offer.page),data]);
+    } catch (e) { setNotice(e instanceof Error ? e.message : 'Groq indisponível. Continue com a leitura local.'); }
+    finally { locked.current=false; setBusy(false); }
   }
   function update(line: number, edit: Partial<Review>) {
     commandId.current = crypto.randomUUID();
@@ -102,15 +120,26 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
         <button type="button" className="button secondary" onClick={previewPdf}>Visualizar PDF</button>
         {images.map((data,i)=><Image key={i} unoptimized src={'data:image/jpeg;base64,'+data} alt={'Página '+(i+1)+' do documento'} width={800} height={1000}/>)}</> :
         <Image unoptimized src={url} alt="Documento selecionado para revisão" width={600} height={400}/>}
-        {vision && file.type.startsWith('image/') && <label className="checkbox"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>Autorizar o envio desta imagem à Groq uma vez para transcrição. Deixe desmarcado para usar OCR local.</label>}
         <button type="button" className="button secondary" onClick={extract}>Extrair dados</button></>}
       {result && <><details><summary>Texto lido do documento</summary>{result.pages.map((p,i) =>
-        <section key={i}><b>Página {i+1} · {p.method === 'text' ? 'Texto digital' : p.method === 'vision' ? 'Visão da Groq' : 'OCR'}</b><pre>{p.text || 'Nenhum texto legível.'}</pre></section>)}</details>
+        <section key={i}><b>Página {i+1} · {p.method === 'text' ? 'Texto digital' : p.method === 'mixed' ? 'OCR de página mista' : 'OCR'}</b><pre>{p.text || 'Nenhum texto legível.'}</pre></section>)}</details>
+        {vision && result.offers.map(offer => <p key={offer.token}>
+          <button type="button" className="button secondary" onClick={() => compare(offer)}>
+            Autorizar envio da imagem da página {offer.page} à Groq para uma segunda leitura
+          </button>
+        </p>)}
+        {comparisons.map(c => <section key={c.page} aria-label={'Comparação da página '+c.page}>
+          <h3>Segunda leitura da Groq · Página {c.page}</h3>
+          {c.rows.map(row => <p key={row.line}>{row.description} · {row.amount ? formatMoney(row.amount) : 'Valor incerto'} · Data {row.date || 'incerta'} · Vencimento {row.dueDate || 'incerto'}</p>)}
+          <details><summary>Comparar as transcrições</summary><b>Leitura local</b><pre>{result.pages[c.page-1].text}</pre><b>Groq</b><pre>{c.text}</pre></details>
+          <p>Confira o documento e edite abaixo os campos que deseja usar.</p>
+        </section>)}
         {rows.map(r => <fieldset key={r.line} className="document-review">
           <legend>Página {r.page} · {r.kind} · Lançamento {r.line}</legend>
           {r.issuer && <p>Emissor ou favorecido: {r.issuer}</p>}
           <p>Vencimento: {r.dueDate || 'não identificado'} · Pagamento: {r.paidDate || 'sem data comprovada'}</p>
           {r.warnings.map(w => <p className="fine-print" key={w}>{w}</p>)}
+          {r.ambiguities.map(w => <p className="fine-print" key={w}>{w}</p>)}
           <div className="document-fields">
             <label>Descrição<input value={r.description} maxLength={160} onChange={e => update(r.line,{description:e.target.value})}/></label>
             <label>Data do lançamento<input type="date" value={r.date} onChange={e => update(r.line,{date:e.target.value})}/></label>

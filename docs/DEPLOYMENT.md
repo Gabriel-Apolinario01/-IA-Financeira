@@ -5,9 +5,9 @@
 1. App Service Linux/Node.js 24 existente, plano com cota disponível.
 2. PostgreSQL provisionado e acessível pelo App Service. Não abra acesso irrestrito de IP. Use rede privada quando disponível ou restrinja firewall aos endereços de saída necessários.
 3. Segredo aleatório de sessão, com pelo menos 32 caracteres, guardado nas configurações privadas do App Service ou no Key Vault.
-4. Para IA: projeto OpenAI, chave restrita a esse projeto, modelo com Responses API e saída JSON Schema estrita, orçamento e alertas definidos no provedor.
+4. O OCR local funciona sem chave. Para habilitar IA externa, configure o provedor escolhido, verifique a cota disponível na organização e obtenha os consentimentos do recurso usado.
 
-Provisionar banco, aumentar plano e usar OpenAI pode gerar cobrança. A escolha de região/plano depende da assinatura e das cotas reais; este arquivo não declara que os recursos já foram criados.
+Provisionamento de banco, mudança de plano e inferência externa podem gerar cobrança.
 
 ## Variáveis privadas do App Service
 
@@ -22,6 +22,8 @@ Provisionar banco, aumentar plano e usar OpenAI pode gerar cobrança. A escolha 
 | AI_ENABLED | `true` após configurar e validar o provedor |
 | OPENAI_API_KEY | Chave privada do projeto OpenAI |
 | OPENAI_MODEL | Identificador de modelo disponível nesse projeto e compatível com JSON Schema |
+| AI_PROVIDER / GROQ_MODEL / GROQ_API_KEY | Provedor e credenciais privadas do chat e diagnóstico quando configurados para Groq |
+| DOCUMENT_VISION_ENABLED / GROQ_VISION_MODEL | Padrão desligado. A segunda leitura aceita `qwen/qwen3.8-27b` e requer a chave privada e consentimento por imagem |
 | AI_GLOBAL_DAILY_LIMIT | `200` inicialmente; 20 chamadas diárias por conta no código |
 | SCM_DO_BUILD_DURING_DEPLOYMENT | `false`, pois o artefato já contém build e dependências |
 
@@ -41,6 +43,15 @@ No modo e-mail, o portal não deve exigir login Microsoft antes de carregar a p�
 6. Registre URL, commit, data, status e capturas sem chaves, cookies ou dados pessoais. Não declare testes online aprovados apenas com testes locais.
 
 ## Falhas úteis
+
+### Pacote Linux e procedimento de retorno
+
+O CI monta um ZIP fora do checkout com dependências de produção, dados portugueses do Tesseract, bibliotecas nativas, build Next.js e scripts de inicialização. Ele extrai esse mesmo ZIP em outra pasta e executa OCR, PDF, cadastro e confirmação sobre PostgreSQL temporário. Consulte no log o SHA-256, o tempo e o pico de memória do subprocesso. O arquivo enviado na publicação manual passa pelo mesmo teste. A plataforma alvo é App Service Linux x64 com Node 24. [Configuração oficial da Microsoft](https://learn.microsoft.com/en-us/azure/app-service/configure-language-nodejs)
+
+1. Antes de uma publicação autorizada, registre o identificador da versão em execução, guarde o artefato anterior e seu SHA-256 e faça cópia privada da configuração. Confirme uma cópia recuperável do PostgreSQL. Para backup lógico, use `pg_dump -Fc` com credenciais privadas. Valide com restauração em banco isolado, conferindo sessões, contagens e saldos de uma conta de teste. Guarde os backups com controle de acesso fora do Git.
+2. Revise o workflow efetivamente vigente em `main` antes da integração. O anterior tinha deploy por push. A versão deste PR exige disparo manual em `main` com `deploy_to_production=true`.
+3. Em homologação autorizada, use o ZIP identificado e documentos fictícios. Confira prontidão, sessão, PDF digital e misto, JPEG, PDF escaneado, duas leituras simultâneas, consumo de memória do plano, confirmação e recarga. Valide o acesso à base destinada à homologação.
+4. Se o smoke falhar, interrompa a promoção. Com autorização operacional, volte ao pacote anterior verificado ou reverta a troca de slot, se disponível. Confirme login, leitura e registros criados desde o backup. Uma restauração de banco exige decisão separada, avaliação dos dados posteriores e validação em base isolada.
 
 - HTTP 403 `This web app is stopped`: conferir estado/cota do App Service. Um erro na hospedagem não é resolvido alterando o React.
 - Banco indisponível: revisar firewall, TLS, URL, permissões e logs sanitizados.

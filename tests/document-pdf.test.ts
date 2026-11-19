@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { readDocument } from '../lib/document-reader';
+import { documentDrafts } from '../lib/document-drafts';
+
+test('página mista com cabeçalho digital e total em imagem produz uma única conta', async () => {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([600,400]);
+  page.drawText('CONTA DE ENERGIA', {x:32,y:345,size:25});
+  const raster = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="200"><rect width="100%" height="100%" fill="white"/><g font-family="Arial" font-size="40"><text x="20" y="65">Total R$ 182,34</text><text x="20" y="145">Vencimento 25/11/2026</text></g></svg>')).png().toBuffer();
+  page.drawImage(await doc.embedPng(raster), {x:20,y:195,width:450,height:100});
+  const pages = await readDocument(Buffer.from(await doc.save()),'application/pdf');
+  assert.equal(pages[0].method,'mixed');
+  const rows = documentDrafts(pages);
+  assert.equal(rows.length,1);
+  assert.deepEqual([rows[0].amount,rows[0].dueDate,rows[0].kind],[18234,'2026-11-25','Conta de energia']);
+});
 
 test('PDF com página digital e página escaneada identifica a origem do texto de cada uma', async () => {
   const document = await PDFDocument.create();

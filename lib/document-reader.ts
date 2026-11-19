@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
-export interface DocumentPage { method: 'text' | 'ocr' | 'preview'; text: string; thumbnail?: string }
+export interface DocumentPage { method: 'text' | 'ocr' | 'mixed' | 'preview'; text: string; thumbnail?: string }
 let active = 0;
 
 export function documentSignature(bytes: Buffer, mime: string) {
@@ -41,7 +41,7 @@ export async function readDocument(bytes: Buffer, mime: string, preview = false)
           if (code !== 0 || size > outputLimit) throw Error();
           const pages = JSON.parse(Buffer.concat(output).toString('utf8'));
           if (!Array.isArray(pages) || pages.length < 1 || pages.length > 4 ||
-              !pages.every(page => page && (preview ? page.method === 'preview' && typeof page.thumbnail === 'string' && /^\/9j\//.test(page.thumbnail) : ['ocr', 'text'].includes(page.method)) &&
+              !pages.every(page => page && (preview ? page.method === 'preview' && typeof page.thumbnail === 'string' && /^\/9j\//.test(page.thumbnail) : ['ocr', 'text', 'mixed'].includes(page.method)) &&
                 typeof page.text === 'string' && page.text.length <= 16000)) throw Error();
           resolve(pages);
         } catch { reject(new Error('Não foi possível ler o documento dentro dos limites.')); }

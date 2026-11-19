@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
-import { readDocument } from '../lib/document-reader';
+import { MAX_DOCUMENT_BYTES, readDocument } from '../lib/document-reader';
 
 // Synthetic, raster-only sources. OCR never receives their text as metadata.
 const examples = [
@@ -23,8 +23,16 @@ for (const example of examples) {
 }
 
 test('recusa assinatura trocada e arquivo truncado', async () => {
+  await assert.rejects(readDocument(Buffer.alloc(MAX_DOCUMENT_BYTES+1),'image/png'),/tamanho/);
   await assert.rejects(readDocument(Buffer.from('%PDF-'), 'image/png'), /assinatura/);
   await assert.rejects(readDocument(Buffer.from('ffd8ff', 'hex'), 'image/jpeg'), /ler o documento/);
+});
+test('terceira leitura simultânea aguarda nova tentativa e os dois leitores liberam a vaga',async()=>{
+  const bytes = await sharp({create:{width:80,height:80,channels:3,background:'white'}}).png().toBuffer();
+  const active = [readDocument(bytes,'image/png'),readDocument(bytes,'image/png')];
+  await assert.rejects(readDocument(bytes,'image/png'),/ocupado/);
+  await Promise.all(active);
+  assert.equal((await readDocument(bytes,'image/png'))[0].method,'ocr');
 });
 test('foto em branco passa pelo OCR sem produzir dados inventados',async()=>{
   const blank=await sharp({create:{width:600,height:300,channels:3,background:'white'}}).png().toBuffer();

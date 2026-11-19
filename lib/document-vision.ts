@@ -2,10 +2,7 @@ import sharp from 'sharp';
 import { readBoundedJson } from './bounded-response';
 import { documentSignature, MAX_DOCUMENT_BYTES } from './document-reader';
 
-export interface VisionConfig { model?: string; key?: string; enabled?: string }
-export function visionConfigured(config: VisionConfig) {
-  return config.enabled === 'true' && Boolean(config.key && config.model) && config.model !== 'openai/gpt-oss-20b';
-}
+import { visionConfigured, type VisionConfig } from './document-vision-config';
 export async function transcribeImage(bytes: Buffer, mime: string, consent: boolean, config: VisionConfig, fetcher = fetch) {
   if (!consent || !visionConfigured(config) || !mime.startsWith('image/') || bytes.length > MAX_DOCUMENT_BYTES || !documentSignature(bytes,mime))
     throw Error('Visão indisponível ou sem autorização.');
@@ -13,6 +10,7 @@ export async function transcribeImage(bytes: Buffer, mime: string, consent: bool
   const metadata = await image.metadata();
   if ((metadata.pages ?? 1) !== 1 || !metadata.format || 'image/'+metadata.format !== mime) throw Error();
   const raster = await image.rotate().resize({width:1600,height:2000,fit:'inside',withoutEnlargement:true}).flatten({background:'white'}).jpeg({quality:82}).toBuffer();
+  if (raster.length > 2_500_000) throw Error('Imagem excede o limite de envio.');
   const signal=AbortSignal.timeout(12_000);
   const response=await fetcher('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal,redirect:'error',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.key},body:JSON.stringify({

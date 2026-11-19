@@ -26,7 +26,8 @@ async function readImage(bytes, mime) {
 }
 
 async function readPdf(bytes, preview) {
-  const { getDocument, VerbosityLevel } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { getDocument, VerbosityLevel, OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const images = new Set(Object.entries(OPS).filter(([name]) => /^paint(?:Inline)?Image/.test(name)).map(([, op]) => op));
   const { createCanvas } = await import('@napi-rs/canvas');
   const pdfAssets = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
   const task = getDocument({
@@ -61,13 +62,18 @@ async function readPdf(bytes, preview) {
         if ('str' in item) text += item.str + (item.hasEOL ? '\n' : ' ');
         if (text.length > 16000) throw Error();
       }
-      if (text.trim().length >= 12 && /\p{L}/u.test(text)) {
+      const nativeText = text.trim();
+      const hasText = nativeText.length >= 12 && /\p{L}/u.test(nativeText);
+      const mixed = hasText && (await page.getOperatorList()).fnArray.some(op => images.has(op));
+      if (hasText && !mixed) {
         results.push({ method: 'text', text: text.trim() });
       } else {
         const scaled = page.getViewport({ scale: Math.min(2.5, 2400 / viewport.width, 3200 / viewport.height) });
         const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
         await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport: scaled }).promise;
-        results.push(await readImage(canvas.toBuffer('image/png'), 'image/png'));
+        const reading = await readImage(canvas.toBuffer('image/png'), 'image/png');
+        // Read the visible page in layout order. Appending two transcripts duplicates receipts and rows.
+        results.push(mixed ? { method: 'mixed', text: reading.text || nativeText } : reading);
       }
       page.cleanup();
     }

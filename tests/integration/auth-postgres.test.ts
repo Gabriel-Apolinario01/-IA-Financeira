@@ -84,8 +84,8 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   const document = await PDFDocument.create();
   document.addPage().drawText('Conta de energia\nTotal R$ 182,34\nVencimento 25/11/2026',{x:30,y:600});
   const bytes = Buffer.from(await document.save());
-  const upload = (cookie: string) => new Request(process.env.BETTER_AUTH_URL + '/api/document', {
-    method:'POST', headers:{origin:process.env.BETTER_AUTH_URL!,cookie,'content-type':'application/pdf'},body:bytes,
+  const upload = (cookie: string, body = bytes, extra: Record<string,string> = {}) => new Request(process.env.BETTER_AUTH_URL + '/api/document', {
+    method:'POST', headers:{origin:process.env.BETTER_AUTH_URL!,cookie,'content-type':'application/pdf',...extra},body,
   });
   assert.equal((await documentPost(upload(''))).status,401);
   const extracted = await documentPost(upload(alice));
@@ -111,4 +111,27 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   const bobChat = await (await chat(request('/api/chat',balance,bob))).json();
   assert.match(aliceChat.facts.join(' '),/123,45/); assert.doesNotMatch(bobChat.facts.join(' '),/123,45/);
   assert.equal((await snapshot(alice)).revision,afterDoc.revision);
+  // Only the injected transport receives an image. No real provider or credentials in this test.
+  process.env.DOCUMENT_VISION_ENABLED = 'true';
+  process.env.GROQ_VISION_MODEL = 'qwen/qwen3.8-27b'; process.env.GROQ_API_KEY = 'test-only';
+  let calls = 0;
+  t.mock.method(globalThis,'fetch',async (url: string) => {
+    assert.equal(url,'https://api.groq.com/openai/v1/chat/completions');
+    calls++;
+    return calls === 1 ? new Response(null,{status:503}) : Response.json({choices:[{finish_reason:'stop',message:{content:'{"text":"Boleto fictício"}'}}]});
+  });
+  const ambiguous = await PDFDocument.create();
+  ambiguous.addPage().drawText('Boleto ficticio sem valor',{x:30,y:600});
+  const scan = Buffer.from(await ambiguous.save());
+  const local = async () => (await documentPost(upload(bob,scan))).json();
+  const second = (token: string) => documentPost(upload(bob,scan,{'x-document-vision-consent':'once','x-document-offer':token}));
+  const beforeReading = await snapshot(bob);
+  const first = await local();
+  assert.equal(calls,0); assert.equal(first.rows[0].amount,null);
+  assert.equal((await second(first.offers[0].token)).status,503);
+  const retry = await local();
+  const accepted = await second(retry.offers[0].token);
+  assert.equal(accepted.status,200); assert.equal((await accepted.json()).page,1);
+  assert.equal((await second(retry.offers[0].token)).status,400);
+  assert.equal(calls,2); assert.deepEqual(await snapshot(bob),beforeReading);
 });
