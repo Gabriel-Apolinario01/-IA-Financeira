@@ -58,7 +58,8 @@ export async function answerChat(input: ChatInput, state: FinanceState | null, c
   if (simulation) facts.simulation = simulation;
   const category = [...input.history,input.question].reverse().map(q => CATEGORIES.find(c => fold(q).includes(fold(c.label)))).find(Boolean);
   const local: ChatAnswer = {mode:'local', paragraphs:[guides[0].summary],
-    facts: simulation ? [simulation] : category && facts[category.id] ? [facts[category.id],facts.consumption,facts.commitment] : [],
+    facts: simulation ? [simulation] : category && facts[category.id] ? [facts[category.id],facts.consumption,facts.commitment]
+      : facts.income ? [facts.income,facts.consumption,facts.commitment] : [],
     sources:[{title:guides[0].sourceTitle,url:guides[0].url}]};
   if (category && /diminuir|reduzir|economizar/.test(fold(input.question)))
     local.paragraphs = ['Para reduzir os gastos em ' + category.label + ', confira quais compras se repetem, escolha uma mudança possível e acompanhe a categoria no próximo mês.'];

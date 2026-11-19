@@ -66,9 +66,33 @@ function interpret(lines: string[], page: number, line: number): DocumentDraft {
 export function documentDrafts(pages: { text: string }[]) {
   const rows: DocumentDraft[] = [];
   for (const [index, page] of pages.entries()) {
+    const lines = page.text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const table = lines.findIndex(s => /\bdata\b.*\b(descricao|lancamento|historico|estabelecimento)\b.*\bvalor\b/.test(fold(s)));
+    if (table >= 0) {
+      const kind = /\bfatura\b/.test(fold(lines.slice(0,table).join(' '))) ? 'Fatura' : 'Movimentações';
+      let items = 0;
+      for (const entry of lines.slice(table+1)) {
+        if (/^(?:total|saldo|subtotal|limite|resumo)\b/.test(fold(entry))) continue;
+        const m = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([+-]?\s*(?:R\$\s*)?[\d.]+,\d{2})$/.exec(entry);
+        if (rows.length >= 40) throw new Error('O documento excede 40 lançamentos. Separe-o antes de enviar.');
+        const draft = interpret([entry],index+1,rows.length+1);
+        draft.kind = kind; draft.description = (m?.[2] ?? entry).slice(0,160);
+        draft.nature = 'unidentified';
+        draft.amount = null;
+        if (m) {
+          const value = amounts([m[3]])[0];
+          const suggested = classifyImportDescription(m[2], m[3].startsWith('+') ? value : -value);
+          draft.amount = draft.currency === 'BRL' ? value ?? null : null; draft.nature = suggested.nature;
+          draft.category = suggested.category ?? 'outros'; draft.direction = m[3].startsWith('+') ? 'income':'expense';
+        }
+        draft.warnings = ['Confira a data, o valor, a natureza e a situação desta linha antes de confirmar.'];
+        rows.push(draft);items++;
+      }
+      if (items) continue;
+    }
     const blocks: string[][] = [];
     let block: string[] = [];
-    for (const line of page.text.split(/\r?\n/).map(s => s.trim()).filter(Boolean)) {
+    for (const line of lines) {
       if (heading.test(fold(line)) && block.length && amounts(block).length) {
         blocks.push(block);
         block = [];

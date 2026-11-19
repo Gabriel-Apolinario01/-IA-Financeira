@@ -22,6 +22,12 @@ test('cupom com itens usa o total; valores conflitantes, moeda estrangeira e doc
   assert.equal(draft('Comprovante PIX\nPIX enviado\nValor pago R$ 90,00\nPago em 22/11/2026').paidDate, '2026-11-22');
   assert.equal(draft('Comprovante PIX\nPagamento agendado\nValor pago R$ 90,00').status, 'planned');
 });
+test('tabela de fatura separa compras, preserva linha ambígua para revisão e exclui total do consumo',()=>{
+  const rows=documentDrafts([{text:'Fatura\nData Descrição Valor\n19/11/2026 Padaria R$ 12,34\n20/11/2026 Farmácia R$ 20,00\nLinha ilegível\nTotal R$ 32,34'}]);
+  assert.deepEqual(rows.map(r=>r.amount),[1234,2000,null]);
+  assert.equal(rows[0].description,'Padaria');assert.equal(rows[0].nature,'expense');
+  assert.equal(rows[2].nature,'unidentified');
+});
 test('confirmação atômica preserva correções, observações, total e identidade após recarga', () => {
   const initial = emptyState();
   const rows = [{line:1, nature:'expense', type:'expense', category:'moradia', amount:18234,

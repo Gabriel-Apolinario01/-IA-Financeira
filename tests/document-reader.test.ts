@@ -26,3 +26,8 @@ test('recusa assinatura trocada e arquivo truncado', async () => {
   await assert.rejects(readDocument(Buffer.from('%PDF-'), 'image/png'), /assinatura/);
   await assert.rejects(readDocument(Buffer.from('ffd8ff', 'hex'), 'image/jpeg'), /ler o documento/);
 });
+test('foto em branco passa pelo OCR sem produzir dados inventados',async()=>{
+  const blank=await sharp({create:{width:600,height:300,channels:3,background:'white'}}).png().toBuffer();
+  const [page]=await readDocument(blank,'image/png');
+  assert.equal(page.method,'ocr');assert.equal(page.text,'');
+});

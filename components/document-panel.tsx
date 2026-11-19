@@ -4,20 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 import { CATEGORIES, type FinanceState, type Transaction } from '../lib/types';
 import { formatMoney, isValidDate, parseMoney } from '../lib/finance';
 import type { DocumentDraft } from '../lib/document-drafts';
-import type { DocumentPage } from '../lib/document-reader';
 
 const natures = { unidentified: 'Escolha a natureza', expense: 'Despesa', income: 'Receita', transfer: 'Transferência', invoice_payment: 'Pagamento de fatura', refund: 'Estorno' };
 type Review = DocumentDraft & { value: string; note: string; selected: boolean };
-type Result = { hash: string; pages: DocumentPage[]; rows: DocumentDraft[] };
-type Props = { state: FinanceState; pending: boolean; account: boolean;
+type Result = { hash: string; pages: {method:'text'|'ocr'|'vision';text:string}[]; rows: DocumentDraft[] };
+type Props = { state: FinanceState; pending: boolean; account: boolean; vision: boolean;
   send: (type: string, payload: Record<string, unknown>, id?: string) => Promise<FinanceState> };
 
 function cents(value: string) {
   try { return parseMoney(value); } catch { return 0; }
 }
 
-export function DocumentPanel({ state, account, pending, send }: Props) {
+export function DocumentPanel({ state, account, pending, send, vision }: Props) {
+  const [consent,setConsent] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [images,setImages] = useState<string[]>([]);
   const [url, setUrl] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [rows, setRows] = useState<Review[]>([]);
@@ -33,6 +34,8 @@ export function DocumentPanel({ state, account, pending, send }: Props) {
     return () => URL.revokeObjectURL(preview);
   }, [file]);
   function choose(input?: File) {
+    setConsent(false);
+    setImages([]);
     setNotice(''); setResult(null); setRows([]); setFile(null); setUrl('');
     if (!input) return;
     if (!['image/jpeg','image/png','image/webp','application/pdf'].includes(input.type) || input.size > 5 * 1024 * 1024) {
@@ -40,11 +43,23 @@ export function DocumentPanel({ state, account, pending, send }: Props) {
     }
     setFile(input);
   }
-  async function extract() {
+  async function previewPdf() {
     if (!file || locked.current) return;
     locked.current = true; setBusy(true); setNotice('');
     try {
-      const response = await fetch('/api/document', { method: 'POST', headers: { 'Content-Type': file.type },
+      const response = await fetch('/api/document',{method:'POST',headers:{'Content-Type':'application/pdf','x-document-action':'preview'},body:file,signal:AbortSignal.timeout(65_000)});
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || 'Falha ao visualizar PDF.');
+      setImages(data.images);
+    } catch (e) { setNotice(e instanceof Error ? e.message : 'Falha ao visualizar PDF.'); }
+    finally { locked.current=false; setBusy(false); }
+  }
+  async function extract() {
+    if (!file || locked.current) return;
+    locked.current = true; setBusy(true); setNotice('');
+    setConsent(false);
+    try {
+      const response = await fetch('/api/document', { method: 'POST', headers: { 'Content-Type': file.type, ...(consent && vision ? {'x-document-vision-consent':'once'} : {}) },
         body: file, signal: AbortSignal.timeout(65_000) });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Falha ao ler o documento.');
@@ -83,11 +98,14 @@ export function DocumentPanel({ state, account, pending, send }: Props) {
         <label>Selecionar foto ou PDF<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => choose(e.target.files?.[0])}/></label>
         <label>Fotografar uma conta<input type="file" accept="image/*" capture="environment" onChange={e => choose(e.target.files?.[0])}/></label>
       </div>
-      {file && url && <><p>{file.name}</p>{file.type === 'application/pdf' ? <iframe title="Visualização do PDF" sandbox="" src={url} /> :
+      {file && url && <><p>{file.name}</p>{file.type === 'application/pdf' ? <>
+        <button type="button" className="button secondary" onClick={previewPdf}>Visualizar PDF</button>
+        {images.map((data,i)=><Image key={i} unoptimized src={'data:image/jpeg;base64,'+data} alt={'Página '+(i+1)+' do documento'} width={800} height={1000}/>)}</> :
         <Image unoptimized src={url} alt="Documento selecionado para revisão" width={600} height={400}/>}
+        {vision && file.type.startsWith('image/') && <label className="checkbox"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>Autorizar o envio desta imagem à Groq uma vez para transcrição. Deixe desmarcado para usar OCR local.</label>}
         <button type="button" className="button secondary" onClick={extract}>Extrair dados</button></>}
       {result && <><details><summary>Texto lido do documento</summary>{result.pages.map((p,i) =>
-        <section key={i}><b>Página {i+1} · {p.method === 'text' ? 'Texto digital' : 'OCR'}</b><pre>{p.text || 'Nenhum texto legível.'}</pre></section>)}</details>
+        <section key={i}><b>Página {i+1} · {p.method === 'text' ? 'Texto digital' : p.method === 'vision' ? 'Visão da Groq' : 'OCR'}</b><pre>{p.text || 'Nenhum texto legível.'}</pre></section>)}</details>
         {rows.map(r => <fieldset key={r.line} className="document-review">
           <legend>Página {r.page} · {r.kind} · Lançamento {r.line}</legend>
           {r.issuer && <p>Emissor ou favorecido: {r.issuer}</p>}
