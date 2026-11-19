@@ -1,5 +1,7 @@
 # Registro de validação — 17/11/2026
 
+**Evidência histórica da versão indicada abaixo.** Os resultados da candidata à entrega estão no [resumo consolidado](ENTREGA-2026-11-21.md).
+
 Base de trabalho: commit `c1fe0ed91e9b7a57c699e0b51283a5b1d08dfc4e` do repositório oficial. As alterações de autenticação, persistência e segurança estão na branch `codex/complete-auth-ai`.
 
 ## Executado nesta revisão

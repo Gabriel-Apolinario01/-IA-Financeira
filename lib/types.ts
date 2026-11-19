@@ -14,7 +14,7 @@ export interface Profile {
 export type TransactionNature = 'income' | 'expense' | 'transfer' | 'invoice_payment' | 'refund' | 'unidentified';
 
 export interface Transaction {
-  /** Optional for legacy records. Classification validation and accounting follow in a later increment. */
+  /** Older records omit nature and retain their original cash direction. */
   nature?: TransactionNature;
   /** Confirmed original transaction for a refund; absence means pending reconciliation. */
   refundOf?: string;

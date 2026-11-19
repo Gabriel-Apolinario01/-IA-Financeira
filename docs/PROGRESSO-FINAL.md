@@ -50,7 +50,7 @@ Com o lockfile final, a instalação reproduzível instalou 631 pacotes. Lint, t
 
 ## Validação externa condicionada a custo zero
 
-O usuário autorizou até duas gerações reais de texto, com dados fictícios e somente na cota gratuita. Na verificação de 19/11/2026, o processo local não tinha `GROQ_API_KEY` e o projeto não tinha `.env.local`. O plano da organização e a disponibilidade da cota gratuita para esse modelo ainda precisam ser confirmados. Nenhuma requisição de inferência foi enviada. A autorização é específica para o chat.
+O usuário autorizou até duas gerações reais de texto, com dados fictícios e somente na cota gratuita. Na verificação de 19/11/2026, o processo local não tinha `GROQ_API_KEY` e o projeto não tinha `.env.local`. A equipe confirmou posteriormente o plano Personal Free. Ainda é preciso verificar a cota disponível para o modelo no momento do teste. Nenhuma requisição de inferência foi enviada. A autorização é específica para o chat.
 
 | Chamada externa | Estado | Verificação local correspondente |
 | --- | --- | --- |
