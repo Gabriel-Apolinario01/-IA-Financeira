@@ -148,7 +148,7 @@ export class FinanceRepository {
     ]);
   }
 
-  async consumeRate(ownerId: string, bucket: "command" | "diagnosis" | "auth" | "ai-user" | "ai-global", limit: number, windowMs = 60_000): Promise<void> {
+  async consumeRate(ownerId: string, bucket: "command" | "diagnosis" | "auth" | "ai-user" | "ai-global" | "import-classification" | "document" | "document-preview" | "chat", limit: number, windowMs = 60_000): Promise<void> {
     const windowStart = Math.floor(this.now().getTime() / windowMs) * windowMs;
     const row = await this.db.get<{ request_count: number }>(
       "INSERT INTO rate_limits (owner_id, bucket, window_start, request_count) VALUES (?, ?, ?, 1) ON CONFLICT(owner_id, bucket) DO UPDATE SET request_count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.request_count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING request_count",

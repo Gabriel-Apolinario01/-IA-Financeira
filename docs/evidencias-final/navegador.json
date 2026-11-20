@@ -1,0 +1,30 @@
+[
+  {
+    "device": "desktop",
+    "width": 1360,
+    "height": 960,
+    "ocr": "ocr",
+    "pdf": "text",
+    "scannedPdf": "ocr",
+    "confirmed": 2,
+    "expenseCents": 20234,
+    "chat": "local",
+    "questions": 2,
+    "financialStateUnchangedByChat": true,
+    "loginAgain": true
+  },
+  {
+    "device": "celular",
+    "width": 390,
+    "height": 844,
+    "ocr": "ocr",
+    "pdf": "text",
+    "scannedPdf": "ocr",
+    "confirmed": 2,
+    "expenseCents": 20234,
+    "chat": "local",
+    "questions": 2,
+    "financialStateUnchangedByChat": true,
+    "loginAgain": true
+  }
+]

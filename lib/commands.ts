@@ -1,7 +1,8 @@
-import { assertMoney, estimateSaving, isValidDate, isValidMonth, MAX_MONEY, MAX_RECORDS, safeSum } from './finance';
+import { assertMoney, estimateSaving, isValidDate, isValidMonth, MAX_MONEY, MAX_RECORDS, safeSum, monthMetrics, budgetEffect, validateRefundLinks } from './finance';
 import { CATEGORIES, type Budget, type Command, type Debt, type FinanceState, type Goal, type Movement, type Profile, type SavingAction, type Transaction } from './types';
 
 type Payload = Record<string, unknown>;
+import { validateTransactionNature } from './transaction-nature';
 const categoryIds = new Set<string>(CATEGORIES.map(category => category.id));
 function object(value: unknown, label: string): Payload {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} inválido.`);
@@ -68,8 +69,17 @@ function profileUpdate(profile: Profile, payload: Payload): Profile {
   }
   return updated;
 }
-function transaction(payload: Payload): Transaction {
-  return { id: id(payload.id), description: text(payload.description, 'Descrição'), amount: money(payload.amount, 'Valor do lançamento', false),
+function transaction(payload: Payload, prior?: Transaction): Transaction {
+  const nature = Object.hasOwn(payload, 'nature') ? validateTransactionNature(payload.nature) : prior?.nature;
+  const refundOf = Object.hasOwn(payload, 'refundOf') ? (payload.refundOf === null ? undefined : id(payload.refundOf)) : prior?.refundOf;
+  const description = payload.category === 'apostas' && payload.type === 'expense'
+    ? text(payload.description ?? '', 'Descrição', 160, true) || 'Gasto com apostas'
+    : text(payload.description, 'Descrição');
+  const note = 'note' in payload ? text(payload.note, 'Observações', 300, true) : prior?.note;
+  return { id: id(payload.id), description, amount: money(payload.amount, 'Valor do lançamento', false),
+    ...(note ? { note } : {}),
+    ...(nature !== undefined ? { nature: validateTransactionNature(nature) } : {}),
+    ...(refundOf !== undefined ? { refundOf } : {}),
     type: enumeration(payload.type, ['income', 'expense'], 'Tipo do lançamento'), category: category(payload.category), date: date(payload.date, 'Data do lançamento'),
     status: enumeration(payload.status, ['planned', 'realized'], 'Situação do lançamento'), expenseKind: enumeration(payload.expenseKind, ['fixed', 'variable'], 'Classificação da despesa') };
 }
@@ -100,6 +110,7 @@ export function validateGoalHistory(state: FinanceState, goalId: string): void {
   }
 }
 export function validateMagnitude(state: FinanceState) {
+  validateRefundLinks(state);
   const collections = [state.transactions, state.budgets, state.goals, state.movements, state.debts, state.savingActions];
   if (collections.some(rows => rows.length > MAX_RECORDS)) throw new Error('Esta coleção atingiu o limite de 10.000 registros do MVP.');
   // Absolute sums prevent hidden overflow even when opposite signs would cancel.
@@ -117,17 +128,37 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
   const payload = object(request.payload, 'Dados enviados');
   let next: FinanceState = { ...state };
   switch (request.type) {
+    case 'document.confirm': {
+      if (typeof payload.hash !== 'string' || !/^[a-f0-9]{64}$/.test(payload.hash) ||
+          !Array.isArray(payload.rows) || !payload.rows.length || payload.rows.length > 40)
+        throw new Error('Seleção de documento inválida.');
+      const seen = new Set<number>();
+      for (const input of payload.rows) {
+        const row = object(input, 'Lançamento revisado');
+        if (typeof row.line !== 'number' || !Number.isInteger(row.line) || row.line < 1 || row.line > 40 || seen.has(row.line))
+          throw new Error('Revise a seleção de linhas do documento.');
+        seen.add(row.line);
+        const key = 'doc_' + payload.hash + '_' + row.line;
+        if (next.transactions.some(t => t.id === key)) throw new Error('Lançamento deste documento já adicionado.');
+        const nature = validateTransactionNature(row.nature);
+        if (nature === 'unidentified' || (nature === 'income' && row.type !== 'income') || (nature === 'expense' && row.type !== 'expense'))
+          throw new Error('Confirme a natureza e a direção do lançamento.');
+        const entry = transaction({ ...row, id: key, expenseKind: 'variable' });
+        next = applyCommand(next, { id: request.id as string, type: 'transaction.save', payload: { ...entry } });
+      }
+      break;
+    }
     case 'profile.update': {
       next.profile = profileUpdate(state.profile, payload);
-      if (next.profile.confirmedNoIncomeMonths.some(value => state.transactions.some(item => item.type === 'income' && item.status === 'realized' && item.date.slice(0, 7) === value))) throw new Error('Este mês já possui receita recebida. Revise os lançamentos antes de confirmar ausência de renda.');
+      if (next.profile.confirmedNoIncomeMonths.some(value => state.transactions.some(item => budgetEffect(state,item).income > 0 && item.status === 'realized' && item.date.slice(0, 7) === value))) throw new Error('Este mês já possui receita recebida. Revise os lançamentos antes de confirmar ausência de renda.');
       break;
     }
     case 'transaction.save': {
       if (state.transactions.some(t => t.id === payload.id && t.origin) || (typeof payload.id === 'string' && payload.id.startsWith('imp_') && state.importBatches?.some(b => b.transactions.some(t => t.id === payload.id)))) throw new Error('Lançamento importado: desfaça o lote no histórico para corrigir a fonte.');
-      const item = transaction(payload);
+      const item = transaction(payload, state.transactions.find(row => row.id === payload.id));
       if (state.debts.some(debt => debt.transactionId === item.id) && (item.type !== 'expense' || item.category !== 'dividas')) throw new Error('Este lançamento está vinculado a uma dívida. Mantenha-o como despesa de dívidas ou desfaça o vínculo antes de alterar.');
       next.transactions = replace(state.transactions, item);
-      if (item.type === 'income' && item.status === 'realized' && state.profile.confirmedNoIncomeMonths.includes(item.date.slice(0, 7))) {
+      if (budgetEffect(next,item).income > 0 && item.status === 'realized' && state.profile.confirmedNoIncomeMonths.includes(item.date.slice(0, 7))) {
         next.profile = { ...state.profile, confirmedNoIncomeMonths: state.profile.confirmedNoIncomeMonths.filter(value => value !== item.date.slice(0, 7)) };
       }
       break;
@@ -218,7 +249,7 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
       const item: SavingAction = { id: id(payload.id), month: month(payload.month), category: category(payload.category),
         reductionPercent: typeof payload.reductionPercent === 'number' ? payload.reductionPercent : NaN,
         baseAmount: aggregateMoney(payload.baseAmount), estimatedSaving: aggregateMoney(payload.estimatedSaving) };
-      const recordedBase = safeSum(state.transactions.filter(row => row.type === 'expense' && row.status === 'realized' && row.category === item.category && row.date.slice(0, 7) === item.month).map(row => row.amount));
+      const recordedBase = monthMetrics(state, item.month).categoryExpenses[item.category];
       if (item.baseAmount !== recordedBase) throw new Error('A base do cenário mudou. Atualize a página e use o gasto realizado desta categoria no mês selecionado.');
       if (state.savingActions.some(row => row.id !== item.id && row.month === item.month && row.category === item.category)) throw new Error('Já existe um cenário escolhido para esta categoria neste mês. Edite o cenário existente.');
       const expected = estimateSaving(item.baseAmount, item.reductionPercent);

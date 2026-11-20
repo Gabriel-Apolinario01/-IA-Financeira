@@ -12,6 +12,9 @@ import { GET as readState } from '../../app/api/state/route';
 import { POST as command } from '../../app/api/command/route';
 import { POST as logout } from '../../app/api/logout/route';
 import { DELETE as deleteData } from '../../app/api/account/route';
+import { POST as chat } from '../../app/api/chat/route';
+import { POST as documentPost } from '../../app/api/document/route';
+import { PDFDocument } from 'pdf-lib';
 
 test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF, exclusão e logout', { timeout: 120_000 }, async (t) => {
   const root = path.resolve('.test-data');
@@ -30,6 +33,7 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   process.env.AZURE_POSTGRES_SSL = 'false'; process.env.AZURE_AUTH_MODE = 'email';
   process.env.BETTER_AUTH_SECRET = randomBytes(32).toString('hex');
   process.env.BETTER_AUTH_URL = 'http://localhost:5174';
+  process.env.AI_ENABLED = 'false';
   const pool = azurePostgresPool();
   const sql = await readFile(new URL('../../db/azure-postgresql.sql', import.meta.url), 'utf8');
   await pool.query(sql);
@@ -77,4 +81,57 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   assert.equal((await readState(request('/api/state', undefined, alice2))).status, 401);
   // No route exposes the auth library's unrelated administrative or account endpoints.
   assert.equal((await authPost(request('/api/auth/delete-user', {}, alice))).status, 404);
+  const document = await PDFDocument.create();
+  document.addPage().drawText('Conta de energia\nTotal R$ 182,34\nVencimento 25/11/2026',{x:30,y:600});
+  const bytes = Buffer.from(await document.save());
+  const upload = (cookie: string, body = bytes, extra: Record<string,string> = {}) => new Request(process.env.BETTER_AUTH_URL + '/api/document', {
+    method:'POST', headers:{origin:process.env.BETTER_AUTH_URL!,cookie,'content-type':'application/pdf',...extra},body,
+  });
+  assert.equal((await documentPost(upload(''))).status,401);
+  const extracted = await documentPost(upload(alice));
+  assert.equal(extracted.status,200); const preview = await extracted.json();
+  assert.equal(preview.rows[0].amount,18234); assert.equal(preview.rows[0].status,'planned');
+  assert.equal((await (await documentPost(upload(alice))).json()).hash,preview.hash);
+  const snapshot = async (cookie: string) => (await readState(request('/api/state',undefined,cookie))).json();
+  const beforeDoc = await snapshot(alice);
+  assert.equal(beforeDoc.state.transactions.length,1);
+  const confirmed = {generation:beforeDoc.generation,revision:beforeDoc.revision,command:{
+    id:'doc-receipt',type:'document.confirm',payload:{hash:preview.hash, rows:[{...preview.rows[0],type:'expense',description:'Energia corrigida'}]},
+  }};
+  assert.equal((await command(request('/api/command',confirmed,alice))).status,200);
+  assert.equal((await command(request('/api/command',confirmed,alice))).status,200);
+  const afterDoc = await snapshot(alice);
+  assert.equal(afterDoc.state.transactions.length,2); assert.equal(afterDoc.state.transactions[1].description,'Energia corrigida');
+  assert.equal((await snapshot(bob)).state.transactions.length,0);
+  const chatBody={month:'2026-11',question:'Quanto gastei em moradia?',history:[],shareMessages:false,shareMetrics:true};
+  assert.equal((await chat(request('/api/chat',chatBody))).status,401);
+  assert.equal((await chat(request('/api/chat',{...chatBody,ownerId:'outra'},bob))).status,400);
+  const balance = {...chatBody,question:'Como está minha renda?'};
+  const aliceChat = await (await chat(request('/api/chat',balance,alice))).json();
+  const bobChat = await (await chat(request('/api/chat',balance,bob))).json();
+  assert.match(aliceChat.facts.join(' '),/123,45/); assert.doesNotMatch(bobChat.facts.join(' '),/123,45/);
+  assert.equal((await snapshot(alice)).revision,afterDoc.revision);
+  // Only the injected transport receives an image. No real provider or credentials in this test.
+  process.env.DOCUMENT_VISION_ENABLED = 'true';
+  process.env.GROQ_VISION_MODEL = 'qwen/qwen3.8-27b'; process.env.GROQ_API_KEY = 'test-only';
+  let calls = 0;
+  t.mock.method(globalThis,'fetch',async (url: string) => {
+    assert.equal(url,'https://api.groq.com/openai/v1/chat/completions');
+    calls++;
+    return calls === 1 ? new Response(null,{status:503}) : Response.json({choices:[{finish_reason:'stop',message:{content:'{"text":"Boleto fictício"}'}}]});
+  });
+  const ambiguous = await PDFDocument.create();
+  ambiguous.addPage().drawText('Boleto ficticio sem valor',{x:30,y:600});
+  const scan = Buffer.from(await ambiguous.save());
+  const local = async () => (await documentPost(upload(bob,scan))).json();
+  const second = (token: string) => documentPost(upload(bob,scan,{'x-document-vision-consent':'once','x-document-offer':token}));
+  const beforeReading = await snapshot(bob);
+  const first = await local();
+  assert.equal(calls,0); assert.equal(first.rows[0].amount,null);
+  assert.equal((await second(first.offers[0].token)).status,503);
+  const retry = await local();
+  const accepted = await second(retry.offers[0].token);
+  assert.equal(accepted.status,200); assert.equal((await accepted.json()).page,1);
+  assert.equal((await second(retry.offers[0].token)).status,400);
+  assert.equal(calls,2); assert.deepEqual(await snapshot(bob),beforeReading);
 });

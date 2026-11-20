@@ -1,5 +1,7 @@
 # Entrega parcial — centralização financeira
 
+**Registro histórico de uma entrega parcial.** Consulte a [preparação da entrega de 21/11/2026](ENTREGA-2026-11-21.md) para o estado da versão candidata.
+
 ## Implementado e verificado no núcleo
 
 - Descoberta do projeto, decisões e lacunas registradas antes da implementação.

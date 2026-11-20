@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import { CATEGORIES, type FinanceState } from './types';
+import { CATEGORIES, type FinanceState, type Transaction } from './types';
 
 /** R$ 10 bilhões por campo; bounded entries and checked sums preserve integer precision. */
 export const MAX_MONEY = 1_000_000_000_000;
@@ -77,31 +77,86 @@ export function goalProgress(state: FinanceState, goalId: string, asOf = todayIS
   }
   return { balance, remaining, percent: goal.target > 0 ? (balance / goal.target) * 100 : 0, monthlyNeeded };
 }
+/** Single budget rule; cash direction remains separate in Transaction.type. */
+export function budgetEffect(state: FinanceState, item: Transaction): { income: number; expenses: number; category: string } {
+  const nature = item.nature ?? item.type;
+  if (nature === 'refund') {
+    const original = state.transactions.find(t => t.id === item.refundOf);
+    if (!original || !['income', 'expense'].includes(original.nature ?? original.type)) return { income: 0, expenses: 0, category: item.category };
+    return { income: (original.nature ?? original.type) === 'income' ? -item.amount : 0,
+      expenses: (original.nature ?? original.type) === 'expense' ? -item.amount : 0, category: original.category };
+  }
+  return { income: nature === 'income' ? item.amount : 0, expenses: nature === 'expense' ? item.amount : 0, category: item.category };
+}
+
+/** Validate links on every mutation, including deleting/reverting an original. */
+export function validateRefundLinks(state: FinanceState): void {
+  const totals = new Map<string, number>();
+  for (const item of state.transactions) {
+    if (item.refundOf === undefined) continue;
+    const original = state.transactions.find(t => t.id === item.refundOf);
+    if (item.nature !== 'refund' || !original || original.id === item.id
+      || !['income', 'expense'].includes(original.nature ?? original.type)
+      || original.status !== 'realized' || item.status !== 'realized'
+      || original.type === item.type || item.date < original.date || item.date.slice(0,7) !== original.date.slice(0,7)) {
+      throw new Error('Vínculo de estorno inválido. Selecione um lançamento realizado do mesmo mês e de direção oposta.');
+    }
+    const amount = safeSum([totals.get(original.id) ?? 0, item.amount]);
+    if (amount > original.amount) throw new Error('Os estornos ultrapassam o valor do lançamento original.');
+    totals.set(original.id, amount);
+  }
+}
+
+/** Absence is not zero. Percentages remain uncapped, including above 100%. */
+export function incomeCommitment(income: number, expenses: number, incomeKnown: boolean) {
+  return {
+    status: income > 0 ? 'positive' as const : incomeKnown ? 'zero' as const : 'unknown' as const,
+    percent: income > 0 ? expenses / income * 100 : null,
+    income, expenses,
+  };
+}
+
 export function monthMetrics(state: FinanceState, month: string) {
   if (!isValidMonth(month)) throw new Error('Mês inválido.');
   const rows = state.transactions.filter(item => item.date.slice(0, 7) === month);
-  const total = (type: 'income' | 'expense', status: 'realized' | 'planned') => safeSum(rows.filter(item => item.type === type && item.status === status).map(item => item.amount));
+  const total = (type: 'income' | 'expense', status: 'realized' | 'planned') => safeSum(rows.filter(item => item.status === status).map(item => budgetEffect(state, item)[type === 'income' ? 'income' : 'expenses']));
   const income = total('income', 'realized');
   const expenses = total('expense', 'realized');
   const pendingIncome = total('income', 'planned');
   const pendingExpenses = total('expense', 'planned');
   const categoryExpenses: Record<string, number> = Object.fromEntries(CATEGORIES.map(item => [item.id, 0]));
   const categoryPending: Record<string, number> = Object.fromEntries(CATEGORIES.map(item => [item.id, 0]));
-  for (const item of rows.filter(item => item.type === 'expense')) {
+  for (const item of rows) {
+    const effect = budgetEffect(state, item);
     const values = item.status === 'realized' ? categoryExpenses : categoryPending;
-    values[item.category] = safeSum([values[item.category] ?? 0, item.amount]);
+    values[effect.category] = safeSum([values[effect.category] ?? 0, effect.expenses]);
   }
   const today = todayISO();
   const guardedAsOf = month < today.slice(0, 7) ? endOfMonth(month) : today;
   const guarded = safeSum(state.goals.map(goal => goalBalance(state, goal.id, guardedAsOf)));
-  const incomeConfirmed = rows.some(item => item.type === 'income' && item.status === 'realized') || state.profile.confirmedNoIncomeMonths.includes(month);
+  const incomeConfirmed = rows.some(item => budgetEffect(state,item).income > 0 && item.status === 'realized') || state.profile.confirmedNoIncomeMonths.includes(month);
+  const cashIncome = safeSum(rows.filter(t => t.status === 'realized' && t.type === 'income').map(t => t.amount));
+  const cashExpenses = safeSum(rows.filter(t => t.status === 'realized' && t.type === 'expense').map(t => t.amount));
   return {
     income, expenses, result: safeSum([income, -expenses]), pendingIncome, pendingExpenses,
+    cashIncome, cashExpenses, cashResult: safeSum([cashIncome,-cashExpenses]),
+    commitment: incomeCommitment(income, expenses, incomeConfirmed),
+    projectedCommitment: incomeCommitment(safeSum([income, pendingIncome]), safeSum([expenses, pendingExpenses]), incomeConfirmed || pendingIncome > 0),
+    pendingReview: rows.filter(t => t.nature === 'unidentified' || (t.nature === 'refund' && !t.refundOf)).length,
     projection: safeSum([income, -expenses, pendingIncome, -pendingExpenses]),
     guarded, guardedAsOf, incomeConfirmed, incomplete: !incomeConfirmed, categoryExpenses, categoryPending,
   };
 }
 export interface SimulationInput { initial: number; monthly: number; months: number; annualRate: string }
+/** Explicitly categorized recognized consumption only; no inference from descriptions. */
+export function bettingSummary(state: FinanceState, month: string) {
+  const metrics = monthMetrics(state, month);
+  const records = state.transactions.filter(t => t.date.startsWith(month) && t.status === 'realized'
+    && (t.nature ?? t.type) === 'expense' && t.category === 'apostas').length;
+  const amount = metrics.categoryExpenses.apostas ?? 0;
+  return { records, amount, pending: metrics.categoryPending.apostas ?? 0,
+    share: metrics.expenses > 0 ? amount / metrics.expenses * 100 : null };
+}
 /**
  * Annual rate is effective; contributions occur at the END of each month.
  * Internal balances retain 40-digit decimal precision. Each output row is rounded
@@ -128,6 +183,14 @@ export function simulate({ initial, monthly, months, annualRate }: SimulationInp
   }
   const balance = balanceExact.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
   return { rows, contributed, balance, growth: balance - contributed };
+}
+
+/** Educational scenario only. Reuses the single compound-interest engine. */
+export function comparePeriodicSpending(input: SimulationInput) {
+  if (!Number.isInteger(input.months) || input.months < 1) throw new Error('Informe um prazo de 1 a 600 meses.');
+  const investment = simulate(input);
+  return { ...investment, spent: safeSum(Array.from({length: input.months}, () => input.monthly)),
+    difference: investment.growth, monthly: input.monthly };
 }
 export interface SavingSuggestion {
   id: string; month: string; category: string; baseAmount: number;

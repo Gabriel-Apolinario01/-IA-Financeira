@@ -1,0 +1,30 @@
+[
+  {
+    "question": "Quero reduzir a conta de energia. Quanto gastei em moradia?",
+    "http": 200,
+    "mode": "local",
+    "paragraphs": [
+      "Para reduzir os gastos em Moradia, confira quais compras se repetem, escolha uma mudança possível e acompanhe a categoria no próximo mês."
+    ],
+    "facts": [
+      "Consumo em Moradia: R$ 182,34",
+      "Despesas de consumo: R$ 202,34",
+      "Renda não informada. Percentual indisponível."
+    ],
+    "displayed": "Quero reduzir a conta de energia. Quanto gastei em moradia?\nOrientação local\n\nPara reduzir os gastos em Moradia, confira quais compras se repetem, escolha uma mudança possível e acompanhe a categoria no próximo mês.\n\nConsumo em Moradia: R$ 182,34\nDespesas de consumo: R$ 202,34\nRenda não informada. Percentual indisponível.\nBanco Central · Orçamento pessoal"
+  },
+  {
+    "question": "E como posso diminuir esses gastos?",
+    "http": 200,
+    "mode": "local",
+    "paragraphs": [
+      "Para reduzir os gastos em Moradia, confira quais compras se repetem, escolha uma mudança possível e acompanhe a categoria no próximo mês."
+    ],
+    "facts": [
+      "Consumo em Moradia: R$ 182,34",
+      "Despesas de consumo: R$ 202,34",
+      "Renda não informada. Percentual indisponível."
+    ],
+    "displayed": "E como posso diminuir esses gastos?\nOrientação local\n\nPara reduzir os gastos em Moradia, confira quais compras se repetem, escolha uma mudança possível e acompanhe a categoria no próximo mês.\n\nConsumo em Moradia: R$ 182,34\nDespesas de consumo: R$ 202,34\nRenda não informada. Percentual indisponível.\nBanco Central · Orçamento pessoal"
+  }
+]

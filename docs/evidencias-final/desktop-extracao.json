@@ -1,0 +1,30 @@
+{
+  "hash": "2a1c676743d1da3ea12063f56d0959bc2d90e1e36d7e6c1e0ce55721e6e7caa6",
+  "pages": [
+    {
+      "method": "ocr",
+      "text": "CONTA DE ENERGIA\nEmissor: Luz Exemplo\n\nTotal R$ 182,34\nVencimento 25/11/2026\nDOCUMENTO FICTICIO PARA TESTES"
+    }
+  ],
+  "rows": [
+    {
+      "line": 1,
+      "page": 1,
+      "kind": "Conta de energia",
+      "issuer": "Luz Exemplo",
+      "currency": "BRL",
+      "description": "Conta de energia — Luz Exemplo",
+      "amount": 18234,
+      "date": "2026-11-25",
+      "dueDate": "2026-11-25",
+      "paidDate": "",
+      "category": "moradia",
+      "nature": "expense",
+      "direction": "expense",
+      "status": "planned",
+      "warnings": [
+        "Pagamento sem comprovação. Sugestão de lançamento previsto."
+      ]
+    }
+  ]
+}
