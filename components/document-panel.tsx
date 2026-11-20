@@ -10,23 +10,20 @@ type Review = DocumentDraft & { value: string; note: string; selected: boolean }
 type Offer = { page: number; token: string };
 type Comparison = { page: number; text: string; rows: DocumentDraft[] };
 type Result = { hash: string; pages: {method:'text'|'ocr'|'mixed';text:string}[]; rows: DocumentDraft[]; offers: Offer[] };
-type Props = { state: FinanceState; pending: boolean; account: boolean; vision: boolean;
+type Props = { state: FinanceState; pending: boolean; file: File; vision: boolean; busy: boolean; setBusy: (busy: boolean) => void;
   send: (type: string, payload: Record<string, unknown>, id?: string) => Promise<FinanceState> };
 
 function cents(value: string) {
   try { return parseMoney(value); } catch { return 0; }
 }
 
-export function DocumentPanel({ state, account, pending, send, vision }: Props) {
+export function DocumentPanel({ state, file, pending, send, vision, busy, setBusy }: Props) {
   const [comparisons,setComparisons] = useState<Comparison[]>([]);
-  const [file, setFile] = useState<File | null>(null);
   const [images,setImages] = useState<string[]>([]);
   const [url, setUrl] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [rows, setRows] = useState<Review[]>([]);
-  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [open, setOpen] = useState(false);
   const commandId = useRef('');
   const locked = useRef(false);
   useEffect(() => {
@@ -35,16 +32,6 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
     setUrl(preview); // eslint-disable-line react-hooks/set-state-in-effect -- release the file URL with its owner
     return () => URL.revokeObjectURL(preview);
   }, [file]);
-  function choose(input?: File) {
-    setComparisons([]);
-    setImages([]);
-    setNotice(''); setResult(null); setRows([]); setFile(null); setUrl('');
-    if (!input) return;
-    if (!['image/jpeg','image/png','image/webp','application/pdf'].includes(input.type) || input.size > 5 * 1024 * 1024) {
-      setNotice('Escolha JPEG, PNG, WebP ou PDF de até 5 MiB.'); return;
-    }
-    setFile(input);
-  }
   async function previewPdf() {
     if (!file || locked.current) return;
     locked.current = true; setBusy(true); setNotice('');
@@ -108,14 +95,9 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
     } catch (e) { setNotice(e instanceof Error ? e.message : 'Falha ao salvar.'); }
     finally { setBusy(false); locked.current = false; }
   }
-  return <section className="card document-panel">
-    <button className="button secondary" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Adicionar por foto ou PDF</button>
-    {open && (account ? <fieldset disabled={busy || pending}>
-      <p>A leitura ocorre no servidor da IA Financeira. A imagem fica em memória. Você confere os campos antes de gravar.</p>
-      <div className="document-fields">
-        <label>Selecionar foto ou PDF<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => choose(e.target.files?.[0])}/></label>
-        <label>Fotografar uma conta<input type="file" accept="image/*" capture="environment" onChange={e => choose(e.target.files?.[0])}/></label>
-      </div>
+  return <section className="document-panel" aria-label="Revisão do documento">
+    <fieldset disabled={busy || pending}>
+      <p>Confira os campos extraídos antes de adicionar o lançamento.</p>
       {file && url && <><p>{file.name}</p>{file.type === 'application/pdf' ? <>
         <button type="button" className="button secondary" onClick={previewPdf}>Visualizar PDF</button>
         {images.map((data,i)=><Image key={i} unoptimized src={'data:image/jpeg;base64,'+data} alt={'Página '+(i+1)+' do documento'} width={800} height={1000}/>)}</> :
@@ -155,7 +137,7 @@ export function DocumentPanel({ state, account, pending, send, vision }: Props) 
             <label className="checkbox"><input type="checkbox" checked={r.selected && ready(r)} disabled={!ready(r)} onChange={e => update(r.line,{selected:e.target.checked})}/>Selecionar lançamento {r.line}</label></>}
         </fieldset>)}
         <button className="button primary" disabled={!selected.length} onClick={confirm}>Confirmar e adicionar ({selected.length})</button></>}
-    </fieldset> : <p>Entre na sua conta para usar a leitura de documentos. <a className="text-link" href="/login">Entrar</a></p>)}
+    </fieldset>
     <p aria-live="polite">{busy ? 'Processando…' : notice}</p>
   </section>;
 }

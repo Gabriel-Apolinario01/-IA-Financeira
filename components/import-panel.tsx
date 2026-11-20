@@ -6,8 +6,25 @@ import { defaultReview, importDuplicate, reviewIssue, selectedImportTotals, type
 import { formatMoney } from '@/lib/finance';
 import { classifyImportDescription, type ImportSuggestion } from '@/lib/import-classifier';
 
+import { DocumentPanel } from './document-panel';
+
+const documentFormats: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf',
+};
+const supportedTypes = '.csv,.tsv,.ofx,.jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf';
+
 const labels: Record<TransactionNature,string> = { income:'Receita', expense:'Despesa', transfer:'Transferência entre contas próprias', invoice_payment:'Pagamento de fatura', refund:'Estorno', unidentified:'Não identificado — revisar' };
-export function ImportPanel({ state, send, pending, allowAssistance = false }: { state: FinanceState; send: (type: string, payload: Record<string, unknown>) => Promise<FinanceState>; pending: boolean; allowAssistance?: boolean }) {
+type Props = {
+  state: FinanceState;
+  send: (type: string, payload: Record<string, unknown>, id?: string) => Promise<FinanceState>;
+  pending: boolean;
+  signedIn: boolean;
+  vision: boolean;
+};
+
+export function ImportPanel({ state, send, pending, signedIn, vision }: Props) {
+  const [document, setDocument] = useState<{ file: File; selection: number } | null>(null);
+  const [documentBusy, setDocumentBusy] = useState(false);
   const [file, setFile] = useState<{name:string;content:string;hash:string}|null>(null);
   const [locale, setLocale] = useState<ImportLocale>('auto');
   const [encoding, setEncoding] = useState<'utf-8'|'windows-1252'>('utf-8');
@@ -25,11 +42,30 @@ export function ImportPanel({ state, send, pending, allowAssistance = false }: {
   if(file) {try {parsed=parseImport(file.name,file.content,locale);} catch(error) {parseError=(error as Error).message;}}
   function resetReview() {classificationRequest.current++;setAccepted([]);setReviews({});setMessage('');setAssistedSuggestions({});setAssistanceNotice('');setDescriptionConsent(false);}
   async function load(upload?: File) {
-    if(!upload || reading || pending) return;
-    setReading(true);setFile(null);resetReview();
+    if (!upload || reading || pending || documentBusy) return;
+    resetReview();
+    setFile(null);
+    const extension = upload.name.split('.').pop()?.toLowerCase() ?? '';
+    const mime = Object.values(documentFormats).includes(upload.type) ? upload.type
+      : Object.hasOwn(documentFormats, extension) ? documentFormats[extension] : undefined;
+    if (mime && signedIn && upload.size > 0 && upload.size <= 5 * 1024 * 1024) {
+      const file = upload.type === mime ? upload : new File([upload], upload.name, { type: mime });
+      setDocument(previous => ({ file, selection: (previous?.selection ?? 0) + 1 }));
+      return;
+    }
+    setDocument(null);
+    if (!upload.size) { setMessage('O arquivo está vazio. Escolha outro arquivo.'); return; }
+    if (mime) {
+      setMessage(signedIn ? 'O limite para fotos e PDFs é 5 MiB.' : 'Entre na sua conta para ler fotos e PDFs.');
+      return;
+    }
+    if (!['csv', 'tsv', 'ofx'].includes(extension)) {
+      setMessage('Formato incompatível. Escolha CSV, TSV, OFX, JPEG, PNG, WebP ou PDF.');
+      return;
+    }
+    setReading(true);
     try {
       if(upload.size>IMPORT_LIMIT) throw new Error('O limite é 100 KB por arquivo.');
-      if(upload.type && !['text/csv','text/tab-separated-values','text/plain','application/x-ofx','application/vnd.intu.qfx','application/octet-stream','application/vnd.ms-excel'].includes(upload.type)) throw new Error('Tipo de arquivo incompatível.');
       const content=decodeImport(await upload.arrayBuffer(),encoding);
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(content));
       const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
@@ -49,7 +85,7 @@ export function ImportPanel({ state, send, pending, allowAssistance = false }: {
   const selectedBlocked=entries.some(e=>accepted.includes(e.row.line) && !e.ready);
   const assistanceRows=entries.filter(e=>!e.row.error && !e.duplicate && e.issue).slice(0,10).map(({row,review})=>({line:row.line,description:review.description,direction:row.amount<0?'expense':'income'}));
   async function requestAssistance() {
-    if(!allowAssistance || !descriptionConsent || assisting || !assistanceRows.length) return;
+    if(!signedIn || !descriptionConsent || assisting || !assistanceRows.length) return;
     const request=++classificationRequest.current;
     setAssisting(true);setAssistanceNotice('');setDescriptionConsent(false);
     try {
@@ -80,21 +116,37 @@ export function ImportPanel({ state, send, pending, allowAssistance = false }: {
   }
   return <section className="card import-panel" aria-labelledby="import-heading">
     <h2 id="import-heading">Importar extrato</h2>
-    <p>CSV, TSV ou OFX em reais · até 100 KB e 300 linhas. Revise os lançamentos antes de confirmar.</p>
+    <p>Selecione ou arraste um arquivo para revisar os lançamentos.</p>
+    <div className="import-drop" onDragOver={e => e.preventDefault()} onDrop={e => {
+      e.preventDefault();
+      void load(e.dataTransfer.files[0]);
+    }}>
+      <label>Extrato, foto ou PDF<input type="file" accept={supportedTypes} disabled={pending || reading || documentBusy}
+        onChange={e => { void load(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>
+      <small>CSV, TSV e OFX até 100 KB e 300 linhas. JPEG, PNG, WebP e PDF até 5 MiB. PDF até 4 páginas.</small>
+      {signedIn && <label className="import-camera">Fotografar uma conta<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment"
+        disabled={pending || reading || documentBusy}
+        onChange={e => { void load(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>}
+      {reading && <p role="status">Lendo arquivo…</p>}
+    </div>
+    {!signedIn && <p><a href="/login">Entre na sua conta</a> para usar a leitura de fotos e PDFs.</p>}
+    {document && <DocumentPanel key={document.selection} file={document.file} state={state} send={send}
+      pending={pending} busy={documentBusy} setBusy={setDocumentBusy} vision={vision} />}
+    {!document && <>
     <p className="fine-print">Cabeçalhos: data, descrição e valor; ou débito e crédito separados. Saldos e totais não são lançamentos. Transferências e pagamentos de fatura não geram novo consumo. Confira se as compras da fatura estão cadastradas.</p>
     <div className="import-controls">
       <label>Apelido da conta<input value={account} maxLength={60} disabled={pending || reading} placeholder="Ex.: Conta principal" onChange={e=>{setAccount(e.target.value);setAccepted([]);}} /></label>
       <label>Formato numérico do CSV<select value={locale} disabled={pending || reading} onChange={e=>{setLocale(e.target.value as ImportLocale);resetReview();}}><option value="auto">Detectar · confirmar ambiguidades</option><option value="br">Brasil: 1.234,56</option><option value="us">Internacional: 1,234.56</option></select></label>
       <label>Codificação do arquivo<select value={encoding} disabled={pending || reading} onChange={e=>{setEncoding(e.target.value as typeof encoding);setFile(null);resetReview();}}><option value="utf-8">UTF-8</option><option value="windows-1252">Windows-1252 (sistemas antigos)</option></select></label>
     </div>
-    <div className="import-drop" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();void load(e.dataTransfer.files[0]);}}><label>Selecione ou arraste um extrato<input type="file" accept=".csv,.tsv,.ofx" disabled={pending || reading} onChange={e=>{void load(e.target.files?.[0]);e.target.value='';}} /></label>{reading && <p role="status">Lendo arquivo…</p>}</div>
+    </>}
     {message && <p role="status" className="notice">{message}</p>}
     {parseError && <p role="alert" className="notice warning">{parseError}</p>}
     {parsed && <>
       <h3>Prévia: {file?.name}</h3>
       <p className="fine-print">Nenhuma sugestão ou linha é confirmada automaticamente. Use o mesmo apelido para a mesma conta. Em caso de número ambíguo, escolha o formato acima; não misture convenções no mesmo arquivo.</p>
       <p className="fine-print">Sugestões por regras locais, sem IA generativa e sem envio de descrições. Aplicar uma sugestão preenche os campos; selecionar e confirmar continuam sendo ações suas.</p>
-      {allowAssistance && <details className="import-assistance"><summary>Classificação assistida por IA (opcional)</summary><p>Quando o serviço estiver habilitado, somente até 10 descrições pendentes e suas direções de caixa serão enviadas à OpenAI. Não enviamos arquivo completo, colunas de valores e datas, apelido da conta ou perfil. Identificadores reconhecíveis são removidos, mas confira as descrições antes de autorizar. Falhas preservam as regras locais.</p><ul>{assistanceRows.map(row=><li key={row.line}>Linha {row.line}: {row.description} · {row.direction==='expense'?'saída':'entrada'}</li>)}</ul><label className="checkbox"><input type="checkbox" checked={descriptionConsent} disabled={assisting} onChange={e=>setDescriptionConsent(e.target.checked)} /><span>Autorizo o envio destas descrições à OpenAI somente nesta solicitação.</span></label><button className="button secondary" disabled={!descriptionConsent || assisting || pending || !assistanceRows.length} onClick={()=>void requestAssistance()}>{assisting?'Solicitando…':'Solicitar sugestões de IA'}</button>{assistanceNotice && <p role="status">{assistanceNotice}</p>}</details>}
+      {signedIn && <details className="import-assistance"><summary>Classificação assistida por IA (opcional)</summary><p>Quando o serviço estiver habilitado, somente até 10 descrições pendentes e suas direções de caixa serão enviadas à OpenAI. Não enviamos arquivo completo, colunas de valores e datas, apelido da conta ou perfil. Identificadores reconhecíveis são removidos, mas confira as descrições antes de autorizar. Falhas preservam as regras locais.</p><ul>{assistanceRows.map(row=><li key={row.line}>Linha {row.line}: {row.description} · {row.direction==='expense'?'saída':'entrada'}</li>)}</ul><label className="checkbox"><input type="checkbox" checked={descriptionConsent} disabled={assisting} onChange={e=>setDescriptionConsent(e.target.checked)} /><span>Autorizo o envio destas descrições à OpenAI somente nesta solicitação.</span></label><button className="button secondary" disabled={!descriptionConsent || assisting || pending || !assistanceRows.length} onClick={()=>void requestAssistance()}>{assisting?'Solicitando…':'Solicitar sugestões de IA'}</button>{assistanceNotice && <p role="status">{assistanceNotice}</p>}</details>}
       <dl className="import-stats" aria-label="Resumo da importação">
         {[["Encontradas",entries.length],["Válidas",entries.length-invalid],["Inválidas",invalid],["Duplicadas exatas",duplicates],["Pendentes de revisão",awaiting],["Selecionadas",accepted.length]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       </dl>
@@ -121,6 +173,6 @@ export function ImportPanel({ state, send, pending, allowAssistance = false }: {
     <h3>Histórico e origem dos lançamentos</h3>
     {!state.importBatches?.length && <p>Nenhum arquivo importado.</p>}
     {state.importBatches?.slice().reverse().map(batch=><details key={batch.id}><summary>{batch.name} · {batch.account} · {batch.transactions.length} lançamentos · {batch.status==='confirmed'?'Confirmado':'Desfeito'}</summary><p>{batch.duplicates} duplicados; {batch.ignored} ignorados; {batch.errors} erros. Origem: {batch.source.toUpperCase()} · BRL · America/Sao_Paulo</p><p className="import-hash">SHA-256: {batch.hash}</p><ul>{confirmedImportRows(batch).map(row=><li key={row.line}>Linha {row.line}: {row.date} · {row.description} · {formatMoney(row.amount)}</li>)}</ul><ul>{batch.transactions.map(t=><li key={t.id}>{t.description} · {t.nature?labels[t.nature]:'Classificação legada'} · {CATEGORIES.find(c=>c.id===t.category)?.label}</li>)}</ul><p>{batch.audit.map(a=>`${a.at}: ${a.action==='confirmed'?'confirmado':'desfeito'}`).join(' / ')}</p><button className="button secondary" disabled={pending} onClick={()=>void change(batch.status==='confirmed'?'import.revert':'import.restore',batch.id)}>{batch.status==='confirmed'?'Desfazer lote':'Restaurar lote'}</button></details>)}
-    <p className="fine-print">Sem conexão bancária. PDF/OCR, Open Finance e conciliação entre fontes ainda não estão disponíveis.</p>
+    <p className="fine-print">Histórico dos extratos CSV, TSV e OFX. Os lançamentos confirmados por foto ou PDF aparecem na lista de lançamentos.</p>
   </section>;
 }

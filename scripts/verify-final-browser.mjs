@@ -45,10 +45,13 @@ try {
       await page.getByLabel('Confirme a senha').fill(password);
       await button('Criar conta').click();
       await button('Lançamentos').click();
-      await button('Adicionar por foto ou PDF').click();
-      const panel=page.locator('.document-panel');
+      const importer=page.getByRole('region',{name:'Importar extrato'});
+      const picker=importer.getByLabel('Extrato, foto ou PDF',{exact:true});
+      const panel=importer.locator('.document-panel');
+      await picker.setInputFiles({name:'extrato.csv',mimeType:'text/csv',buffer:Buffer.from('data;descricao;valor\n2026-11-19;Mercado;-10,00')});
+      await importer.getByRole('table').waitFor();
       const upload=async (name,mimeType,buffer) => {
-        await panel.getByLabel('Selecionar foto ou PDF').setInputFiles({name,mimeType,buffer});
+        await picker.setInputFiles({name,mimeType,buffer});
         const reading = page.waitForResponse(r=>r.url()===base+'/api/document',{timeout:60_000});
         await button('Extrair dados').click();
         const response=await reading;
@@ -70,7 +73,12 @@ try {
       await screenshot('lancamento',page.locator('.records-card'));
       const again=await upload('reenvio.jpg','image/jpeg',jpeg);assert.equal(again.hash,energy.hash);
       await panel.getByText('Já adicionado a partir deste documento.').waitFor();
-      await panel.getByLabel('Selecionar foto ou PDF').setInputFiles({name:'cupom.pdf',mimeType:'application/pdf',buffer:pdf});
+      // Some file managers omit the MIME type when a PDF is dropped.
+      await importer.locator('.import-drop').evaluate((zone,bytes)=>{
+        const transfer=new DataTransfer();
+        transfer.items.add(new File([new Uint8Array(bytes)],'cupom.PDF'));
+        zone.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));
+      },Array.from(pdf));
       await button('Visualizar PDF').click();
       await panel.getByRole('img',{name:'Página 1 do documento'}).waitFor();
       await screenshot('pdf',panel.getByRole('img',{name:'Página 1 do documento'}));

@@ -32,6 +32,7 @@ body{font-size:16px}.brand small{display:none}.button,.text-link,.nav-item,.fiel
 .import-panel>* { min-width:0; }
 .table-scroll,.import-table { position:relative; }
 .import-drop label { display:block; min-width:0; }
+.import-drop .import-camera { margin-top: 12px; }
 .import-drop input[type=file] { width:100%; }
 .import-panel .import-controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
 .import-controls label { min-width:0; }
