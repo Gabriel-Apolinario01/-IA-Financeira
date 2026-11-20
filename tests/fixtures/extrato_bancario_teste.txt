@@ -1,0 +1,25 @@
+BANCO EXEMPLO - EXTRATO DE CONTA 
+DOCUMENTO FICTICIO PARA TESTES DE SOFTWARE - NAO E UM EXTRATO REAL 
+Titular: Cliente Teste | Conta: 000123-4 | Agencia: 0001
+Periodo: 01/11/2026 a 20/11/2026 | Moeda: BRL (R$)
+Saldo inicial: R$ 1.200,00 
+Data   Descricao   Entrada (R$)   Saida (R$)   Saldo (R$) 
+02/11/2026   PIX RECEBIDO - EMPRESA EXEMPLO   3.500,00   -   4.700,00
+03/11/2026   SUPERMERCADO CENTRAL   -   245,90   4.454,10
+04/11/2026   PIX ENVIADO - MARIA SILVA   -   150,00   4.304,10
+05/11/2026   ASSINATURA STREAMING   -   39,90   4.264,20
+06/11/2026   FARMACIA POPULAR   -   62,50   4.201,70
+08/11/2026   RESTAURANTE SABOR   -   78,00   4.123,70
+10/11/2026   TRANSFERENCIA RECEBIDA   450,00   -   4.573,70
+11/11/2026   POSTO COMBUSTIVEL   -   180,00   4.393,70
+12/11/2026   COMPRA ONLINE - LIVRARIA   -   89,90   4.303,80
+14/11/2026   CONTA DE ENERGIA   -   210,35   4.093,45
+15/11/2026   PIX ENVIADO - JOAO COSTA   -   95,00   3.998,45
+17/11/2026   REEMBOLSO COMPRA   65,00   -   4.063,45
+18/11/2026   INTERNET RESIDENCIAL   -   109,90   3.953,55
+19/11/2026   PADARIA DO BAIRRO   -   27,80   3.925,75 
+Total de entradas: R$ 4.015,00
+Total de saidas: R$ 1.289,25
+Saldo final: R$ 3.925,75
+Todos os nomes, transacoes e numeros deste documento sao inventados. Gerado exclusivamente para validacao de
+leitura de PDF e classificacao de lancamentos.

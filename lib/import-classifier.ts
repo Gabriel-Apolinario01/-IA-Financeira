@@ -13,7 +13,7 @@ const rules = [
   {category:'alimentacao',pattern:/\b(padaria|panificadora|supermercado|mercado|hortifruti|restaurante|lanchonete|acougue)\b/,reason:'Descrição contém referência a alimentação.'},
   {category:'saude',pattern:/\b(farmacia|drogaria|consulta medica|posto de saude|laboratorio clinico)\b/,reason:'Descrição contém referência a saúde.'},
   {category:'transporte',pattern:/\b(posto de combustivel|posto de combustiveis|combustivel|abastecimento|gasolina|diesel|passagem de onibus|estacionamento)\b/,reason:'Descrição contém referência a transporte ou combustível.'},
-  {category:'moradia',pattern:/\b(conta de luz|energia eletrica|conta de agua|aluguel|condominio)\b/,reason:'Descrição contém referência a uma despesa de moradia.'},
+  {category:'moradia',pattern:/\b(conta de luz|conta de energia|energia eletrica|conta de agua|internet residencial|aluguel|condominio)\b/,reason:'Descrição contém referência a uma despesa de moradia.'},
   {category:'educacao',pattern:/\b(mensalidade escolar|mensalidade da escola|mensalidade faculdade|mensalidade universitaria|material escolar|curso de idiomas)\b/,reason:'Descrição contém referência a educação.'},
   {category:'assinaturas',pattern:/\b(netflix|spotify|assinatura streaming|servico de streaming|servicos de streaming|mensalidade streaming)\b/,reason:'Descrição contém referência a assinatura ou streaming.'},
 ] as const;
