@@ -1,5 +1,6 @@
 import { isValidDate, parseMoney } from './finance';
 import { classifyImportDescription } from './import-classifier';
+import { documentTableContext, documentTableHeader, documentTableRow, type DocumentTable } from './document-table';
 import type { Transaction } from './types';
 
 export interface DocumentDraft {
@@ -77,31 +78,29 @@ function interpret(lines: string[], page: number, line: number): DocumentDraft {
 
 export function documentDrafts(pages: { text: string }[]) {
   const rows: DocumentDraft[] = [];
+  let previousTable: DocumentTable | null = null;
   for (const [index, page] of pages.entries()) {
     const lines = page.text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-    const table = lines.findIndex(s => /\bdata\b.*\b(descricao|lancamento|historico|estabelecimento)\b.*\bvalor\b/.test(fold(s)));
-    if (table >= 0) {
-      const kind = /\bfatura\b/.test(fold(lines.slice(0,table).join(' '))) ? 'Fatura' : 'Movimentações';
+    const table = lines.findIndex(s => documentTableHeader(s));
+    const continuation = table < 0 && previousTable && /^\d{2}\/\d{2}\/\d{4}\s/.test(lines[0] ?? '');
+    if (table >= 0 || continuation) {
+      let context: DocumentTable = table >= 0 ? documentTableContext(lines.slice(0, table + 1), documentTableHeader(lines[table])!, table === 0 ? previousTable ?? undefined : undefined) : previousTable!;
+      // Repeated headers on subsequent pages retain the statement's currency and status.
+      previousTable = context;
       let items = 0;
+      let footer = false;
       for (const entry of lines.slice(table+1)) {
-        if (/^(?:total|saldo|subtotal|limite|resumo)\b/.test(fold(entry))) continue;
-        const m = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([+-]?\s*(?:R\$\s*)?[\d.]+,\d{2})$/.exec(entry);
+        const repeated = documentTableHeader(entry);
+        if (repeated) { context = documentTableContext([entry], repeated, context); previousTable = context; footer = false; continue; }
+        const content = fold(entry).replace(/^\d{2}\/\d{2}\/\d{4}\s+/, '');
+        if (/^(?:total|totais|saldo|subtotal|limite|resumo)\b/.test(content)) { footer = true; continue; }
+        if (footer && !/^\d{2}\/\d{2}\/\d{4}\s/.test(entry)) continue;
         if (rows.length >= 40) throw new Error('O documento excede 40 lançamentos. Separe-o antes de enviar.');
-        const draft = interpret([entry],index+1,rows.length+1);
-        draft.kind = kind; draft.description = (m?.[2] ?? entry).slice(0,160);
-        draft.nature = 'unidentified';
-        draft.amount = null;
-        if (m) {
-          const value = amounts([m[3]])[0];
-          const suggested = classifyImportDescription(m[2], m[3].startsWith('+') ? value : -value);
-          draft.amount = draft.currency === 'BRL' ? value ?? null : null; draft.nature = suggested.nature;
-          draft.category = suggested.category ?? 'outros'; draft.direction = m[3].startsWith('+') ? 'income':'expense';
-        }
-        draft.warnings = ['Confira a data, o valor, a natureza e a situação desta linha antes de confirmar.'];
-        rows.push(draft);items++;
+        rows.push(documentTableRow(entry, context, index + 1, rows.length + 1)); items++;
       }
       if (items) continue;
     }
+    previousTable = null;
     const blocks: string[][] = [];
     let block: string[] = [];
     for (const line of lines) {
