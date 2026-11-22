@@ -38,3 +38,25 @@ test('recusa PDF acima do limite de páginas antes de ler seu conteúdo', async 
   for (let i = 0; i < 5; i++) document.addPage();
   await assert.rejects(readDocument(Buffer.from(await document.save()), 'application/pdf'), /limites/);
 });
+
+
+test('PDF digital em colunas posicionadas reconstruídas pela coordenada visual', async () => {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([620, 410]);
+  const put = (value: string, x: number, y: number) => page.drawText(value, {x, y, size: 12});
+  put('Extrato bancario BRL', 20, 374);
+  [['Data',20],['Historico',132],['Credito',340],['Debito',428],['Saldo',524]]
+    .forEach(([value,x]) => put(String(value), Number(x), 344));
+  [['02/11/2026',20],['Recebimento',132],['900,00',340],['-',428],['900,00',524]]
+    .forEach(([value,x]) => put(String(value), Number(x), 316));
+  [['03/11/2026',20],['Padaria',132],['-',340],['20,00',428],['880,00',524]]
+    .forEach(([value,x]) => put(String(value), Number(x), 288));
+  const pages = await readDocument(Buffer.from(await doc.save()), 'application/pdf');
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].method, 'text');
+  assert.match(pages[0].text, /Data\s+Historico\s+Credito\s+Debito\s+Saldo/);
+  const rows = documentDrafts(pages);
+  assert.deepEqual(rows.map(r => [r.date,r.amount,r.direction]), [
+    ['2026-11-02',90000,'income'],['2026-11-03',2000,'expense']
+  ]);
+});
