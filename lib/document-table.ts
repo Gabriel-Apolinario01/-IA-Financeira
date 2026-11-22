@@ -77,7 +77,7 @@ export function documentTableRow(entry: string, context: DocumentTable, page: nu
         else if (/^-/.test(cell)) direction = 'expense';
         else if (context.kind === 'Extrato bancário') {
           const foldedDescription = fold(description);
-          if (/\b(recebimento|deposito|creditado|proventos)\b/.test(foldedDescription)) direction = 'income';
+          if (/\b(recebimento|recebid[ao]|deposito|creditado|proventos)\b/.test(foldedDescription)) direction = 'income';
           else if (!/\b(compra|saque|debito|pagamento|tarifa)\b/.test(foldedDescription))
             ambiguities.push('Coluna Valor sem indicação inequívoca de entrada ou saída.');
         }
