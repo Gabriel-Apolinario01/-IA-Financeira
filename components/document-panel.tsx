@@ -102,7 +102,7 @@ export function DocumentPanel({ state, file, pending, send, vision, busy, setBus
         <button type="button" className="button secondary" onClick={previewPdf}>Visualizar PDF</button>
         {images.map((data,i)=><Image key={i} unoptimized src={'data:image/jpeg;base64,'+data} alt={'Página '+(i+1)+' do documento'} width={800} height={1000}/>)}</> :
         <Image unoptimized src={url} alt="Documento selecionado para revisão" width={600} height={400}/>}
-        <button type="button" className="button secondary" onClick={extract}>Extrair dados</button></>}
+        <button type="button" className="button secondary" data-tour="document-extract" onClick={extract}>Extrair dados</button></>}
       {result && <><details><summary>Texto lido do documento</summary>{result.pages.map((p,i) =>
         <section key={i}><b>Página {i+1} · {p.method === 'text' ? 'Texto digital' : p.method === 'mixed' ? 'OCR de página mista' : 'OCR'}</b><pre>{p.text || 'Nenhum texto legível.'}</pre></section>)}</details>
         {vision && result.offers.map(offer => <p key={offer.token}>
@@ -122,7 +122,7 @@ export function DocumentPanel({ state, file, pending, send, vision, busy, setBus
           <p>Vencimento: {r.dueDate || 'não identificado'} · Pagamento: {r.paidDate || 'sem data comprovada'}</p>
           {r.warnings.map(w => <p className="fine-print" key={w}>{w}</p>)}
           {r.ambiguities.map(w => <p className="fine-print" key={w}>{w}</p>)}
-          <div className="document-fields">
+          <div className="document-fields" data-tour="document-fields">
             <label>Descrição<input value={r.description} maxLength={160} onChange={e => update(r.line,{description:e.target.value})}/></label>
             <label>Data do lançamento<input type="date" value={r.date} onChange={e => update(r.line,{date:e.target.value})}/></label>
             <label>Valor em reais<input inputMode="decimal" value={r.value} onChange={e => update(r.line,{value:e.target.value})}/></label>
@@ -134,9 +134,9 @@ export function DocumentPanel({ state, file, pending, send, vision, busy, setBus
           </div>
           {duplicate(r) ? <p>Já adicionado a partir deste documento.</p> : <>
             {state.transactions.some(t => t.date === r.date && t.amount === cents(r.value)) && <p className="notice warning">Já existe um lançamento com esta data e valor. Confira antes de selecionar.</p>}
-            <label className="checkbox"><input type="checkbox" checked={r.selected && ready(r)} disabled={!ready(r)} onChange={e => update(r.line,{selected:e.target.checked})}/>Selecionar lançamento {r.line}</label></>}
+            <label className="checkbox" data-tour="document-select"><input type="checkbox" checked={r.selected && ready(r)} disabled={!ready(r)} onChange={e => update(r.line,{selected:e.target.checked})}/>Selecionar lançamento {r.line}</label></>}
         </fieldset>)}
-        <button className="button primary" disabled={!selected.length} onClick={confirm}>Confirmar e adicionar ({selected.length})</button></>}
+        <button className="button primary" disabled={!selected.length} data-tour="document-confirm" onClick={confirm}>Confirmar e adicionar ({selected.length})</button></>}
     </fieldset>
     <p aria-live="polite">{busy ? 'Processando…' : notice}</p>
   </section>;

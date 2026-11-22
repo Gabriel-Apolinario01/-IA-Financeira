@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import "driver.js/dist/driver.css";
 import "./globals.css";
+import "./tour.css";
 
 export const metadata: Metadata = {
   title: "IA Financeira Azure — seu dinheiro, com mais clareza",

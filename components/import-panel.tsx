@@ -20,9 +20,10 @@ type Props = {
   pending: boolean;
   signedIn: boolean;
   vision: boolean;
+  onDocumentHelp?: () => void;
 };
 
-export function ImportPanel({ state, send, pending, signedIn, vision }: Props) {
+export function ImportPanel({ state, send, pending, signedIn, vision, onDocumentHelp }: Props) {
   const [document, setDocument] = useState<{ file: File; selection: number } | null>(null);
   const [documentBusy, setDocumentBusy] = useState(false);
   const [file, setFile] = useState<{name:string;content:string;hash:string}|null>(null);
@@ -114,14 +115,15 @@ export function ImportPanel({ state, send, pending, signedIn, vision }: Props) {
     try {await send(type,{id});setMessage(type==='import.revert'?'Lote desfeito. A origem foi preservada.':'Lote restaurado.');setAccepted([]);}
     catch(error) {setMessage((error as Error).message);}
   }
-  return <section className="card import-panel" aria-labelledby="import-heading">
+  return <section className="card import-panel" aria-labelledby="import-heading" data-tour-draft={Boolean(file || document)} data-tour-busy={reading || documentBusy || assisting}>
+    {onDocumentHelp && <button type="button" className="text-link document-help" disabled={pending || reading || documentBusy} onClick={onDocumentHelp}>Como importar e revisar um documento?</button>}
     <h2 id="import-heading">Importar extrato</h2>
     <p>Selecione ou arraste um arquivo para revisar os lançamentos.</p>
     <div className="import-drop" onDragOver={e => e.preventDefault()} onDrop={e => {
       e.preventDefault();
       void load(e.dataTransfer.files[0]);
     }}>
-      <label>Extrato, foto ou PDF<input type="file" accept={supportedTypes} disabled={pending || reading || documentBusy}
+      <label data-tour="document-upload">Extrato, foto ou PDF<input type="file" accept={supportedTypes} disabled={pending || reading || documentBusy}
         onChange={e => { void load(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} /></label>
       <small>CSV, TSV e OFX até 100 KB e 300 linhas. JPEG, PNG, WebP e PDF até 5 MiB. PDF até 4 páginas.</small>
       {signedIn && <label className="import-camera">Fotografar uma conta<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment"
