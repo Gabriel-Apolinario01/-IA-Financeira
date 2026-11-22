@@ -82,7 +82,8 @@ export function documentDrafts(pages: { text: string }[]) {
   for (const [index, page] of pages.entries()) {
     const lines = page.text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     const table = lines.findIndex(s => documentTableHeader(s));
-    const continuation = table < 0 && previousTable && /^\d{2}\/\d{2}\/\d{4}\s/.test(lines[0] ?? '');
+    const continuedRow = (line: string) => /^\d{1,2}\/\d{1,2}\/\d{4}\s/.test(line) || Boolean(previousTable?.period && /^\d{1,2}\s/.test(line));
+    const continuation = table < 0 && previousTable && continuedRow(lines[0] ?? '');
     if (table >= 0 || continuation) {
       let context: DocumentTable = table >= 0 ? documentTableContext(lines.slice(0, table + 1), documentTableHeader(lines[table])!, table === 0 ? previousTable ?? undefined : undefined) : previousTable!;
       // Repeated headers on subsequent pages retain the statement's currency and status.
@@ -92,9 +93,9 @@ export function documentDrafts(pages: { text: string }[]) {
       for (const entry of lines.slice(table+1)) {
         const repeated = documentTableHeader(entry);
         if (repeated) { context = documentTableContext([entry], repeated, context); previousTable = context; footer = false; continue; }
-        const content = fold(entry).replace(/^\d{2}\/\d{2}\/\d{4}\s+/, '');
+        const content = fold(entry).replace(/^\d{1,2}(?:\/\d{1,2}\/\d{4})?\s+/, '');
         if (/^(?:total|totais|saldo|subtotal|limite|resumo)\b/.test(content)) { footer = true; continue; }
-        if (footer && !/^\d{2}\/\d{2}\/\d{4}\s/.test(entry)) continue;
+        if (footer && !/^\d{1,2}(?:\/\d{1,2}\/\d{4})?\s/.test(entry)) continue;
         if (rows.length >= 40) throw new Error('O documento excede 40 lançamentos. Separe-o antes de enviar.');
         rows.push(documentTableRow(entry, context, index + 1, rows.length + 1)); items++;
       }
