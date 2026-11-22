@@ -47,7 +47,7 @@ test('tabela de fatura separa compras, preserva linha ambígua para revisão e e
 });
 test('confirmação atômica preserva correções, observações, total e identidade após recarga', () => {
   const initial = emptyState();
-  const rows = [{line:1, nature:'expense', type:'expense', category:'moradia', amount:18234,
+  const rows = [{line:1, currency:'BRL', nature:'expense', type:'expense', category:'moradia', amount:18234,
     date:'2026-11-25', description:'Energia revisada', note:'Mês de outubro', status:'planned'}];
   const command = {id:'confirm', type:'document.confirm', payload:{hash:'a'.repeat(64),rows}};
   const state = JSON.parse(JSON.stringify(applyCommand(initial, command)));
@@ -57,4 +57,16 @@ test('confirmação atômica preserva correções, observações, total e identi
   assert.throws(() => applyCommand(state,command), /já adicionado/);
   assert.throws(() => applyCommand(initial,{...command,payload:{...command.payload,rows:[...rows,{...rows[0],line:2,nature:'unidentified'}]}}),/natureza/);
   assert.equal(initial.transactions.length,0);
+});
+
+
+test('OCR com valores plausíveis oferece releitura visual opcional e exige consentimento específico', () => {
+  const rows = documentDrafts([{text: 'Conta de energia\nTotal R$ 182,34\nVencimento 25/11/2026'}]);
+  assert.equal(rows[0].ambiguities.length, 0);
+  const suggestions = offerSecondReadings('ocr-account', 'ocr-safe-hash', rows, [{method:'ocr'}]);
+  assert.deepEqual(suggestions.map(item => item.page), [1]);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'other-account', 'ocr-safe-hash'), null);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'ocr-account', 'ocr-safe-hash'), 1);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'ocr-account', 'ocr-safe-hash'), null);
+  assert.deepEqual(offerSecondReadings('pdf-text-account', 'pdf-text-hash', rows, [{method:'text'}]), []);
 });

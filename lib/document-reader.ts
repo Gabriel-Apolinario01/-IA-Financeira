@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
-export interface DocumentPage { method: 'text' | 'ocr' | 'mixed' | 'preview'; text: string; thumbnail?: string }
+export interface DocumentPage { method: 'text' | 'ocr' | 'mixed' | 'preview'; text: string; thumbnail?: string; nativeText?: string; positions?: {text:string;x:number;y:number}[]; layoutOmitted?:boolean }
 let active = 0;
 
 export function documentSignature(bytes: Buffer, mime: string) {
@@ -20,7 +20,7 @@ export async function readDocument(bytes: Buffer, mime: string, preview = false)
   active++;
   try {
     return await new Promise<DocumentPage[]>((resolve, reject) => {
-      const outputLimit = preview ? 2_200_000 : 256_000;
+      const outputLimit = preview ? 2_200_000 : 640_000;
       const reader = spawn(process.execPath, ['--max-old-space-size=256', path.resolve('scripts/read-document.mjs'), mime, preview ? 'preview' : 'extract'], {
         stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
         env: { NODE_ENV: 'production', ...Object.fromEntries(['SystemRoot', 'PATH', 'TEMP', 'TMP', 'TMPDIR', 'LANG'].flatMap(key =>

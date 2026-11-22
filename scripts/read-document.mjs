@@ -10,12 +10,58 @@ const maxPixels = 16_000_000;
 sharp.cache(false);
 sharp.concurrency(1);
 
+// Preserve visual rows and column spacing in text-based PDFs. PDF.js items can
+// arrive out of reading order even when the PDF contains selectable text.
+function pdfLayoutText(items) {
+  const rows = [];
+  let fallback = '';
+  let missingPosition = false;
+  for (const item of items) {
+    if (typeof item.str !== 'string') continue;
+    fallback += item.str + (item.hasEOL ? '\n' : ' ');
+    if (!item.str.trim()) continue;
+    const matrix = item.transform;
+    if (!Array.isArray(matrix) || !Number.isFinite(matrix[4]) || !Number.isFinite(matrix[5])) {
+      missingPosition = true;
+      continue;
+    }
+    const part = {
+      text: item.str.trim(), x: matrix[4], y: matrix[5],
+      width: Number(item.width) || 0, height: Number(item.height) || 10,
+    };
+    const tolerance = Math.min(3.5, Math.max(1.5, part.height * 0.28));
+    let row = rows.find(line => Math.abs(line.y - part.y) <= tolerance);
+    if (!row) { row = { y: part.y, parts: [] }; rows.push(row); }
+    row.parts.push(part);
+  }
+  if (missingPosition || !rows.length) return fallback.trim();
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map(row => {
+    const parts = row.parts.sort((a, b) => a.x - b.x);
+    let line = '';
+    let end = -Infinity;
+    let glyphWidth = 5;
+    for (const part of parts) {
+      const gap = part.x - end;
+      if (line) {
+        const spaces = gap > glyphWidth * 0.45
+          ? Math.max(1, Math.min(18, Math.round(gap / glyphWidth))) : 0;
+        line += ' '.repeat(spaces);
+      }
+      line += part.text;
+      end = Math.max(end, part.x + part.width);
+      glyphWidth = Math.min(16, Math.max(3, part.width / Math.max(1, part.text.length)));
+    }
+    return line;
+  }).filter(Boolean).join('\n').trim();
+}
+
 async function readImage(bytes, mime) {
   const image = sharp(bytes, { limitInputPixels: maxPixels, failOn: 'warning' });
   const meta = await image.metadata();
   if (meta.format !== mimeFormats.get(mime) || !meta.width || !meta.height ||
       meta.width * meta.height > maxPixels || (meta.pages ?? 1) !== 1) throw Error();
-  const prepared = await image.rotate().resize({ width: 2400, height: 3200, fit: 'inside', withoutEnlargement: true })
+  const prepared = await image.rotate().resize({ width: Math.min(2400, Math.max(meta.width,meta.height) * 2), height: 3200, fit: 'inside', withoutEnlargement: Math.min(meta.width,meta.height) >= 500 })
     .flatten({ background: 'white' }).grayscale().normalize().png().toBuffer();
   const worker = await createWorker('por', OEM.LSTM_ONLY, { langPath: portuguese.langPath, cacheMethod: 'none' });
   try {
@@ -57,23 +103,24 @@ async function readPdf(bytes, preview) {
         continue;
       }
       const content = await page.getTextContent();
-      let text = '';
-      for (const item of content.items) {
-        if ('str' in item) text += item.str + (item.hasEOL ? '\n' : ' ');
-        if (text.length > 16000) throw Error();
-      }
+      const text = pdfLayoutText(content.items);
+      if (text.length > 16000) throw Error();
       const nativeText = text.trim();
       const hasText = nativeText.length >= 12 && /\p{L}/u.test(nativeText);
       const mixed = hasText && (await page.getOperatorList()).fnArray.some(op => images.has(op));
+      const positions = content.items.filter(item => item.str?.trim()).map(item => ({
+        text:item.str, x:item.transform[4], y:item.transform[5],
+      }));
+      const layout = Buffer.byteLength(JSON.stringify(positions)) <= 24000 ? {positions} : {layoutOmitted:true};
       if (hasText && !mixed) {
-        results.push({ method: 'text', text: text.trim() });
+        results.push({ method: 'text', text: text.trim(), ...layout });
       } else {
         const scaled = page.getViewport({ scale: Math.min(2.5, 2400 / viewport.width, 3200 / viewport.height) });
         const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
         await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport: scaled }).promise;
         const reading = await readImage(canvas.toBuffer('image/png'), 'image/png');
         // Read the visible page in layout order. Appending two transcripts duplicates receipts and rows.
-        results.push(mixed ? { method: 'mixed', text: reading.text || nativeText } : reading);
+        results.push(mixed ? { method: 'mixed', text: reading.text || nativeText, nativeText, ...layout } : reading);
       }
       page.cleanup();
     }
