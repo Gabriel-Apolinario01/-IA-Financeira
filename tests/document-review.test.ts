@@ -58,3 +58,15 @@ test('confirmação atômica preserva correções, observações, total e identi
   assert.throws(() => applyCommand(initial,{...command,payload:{...command.payload,rows:[...rows,{...rows[0],line:2,nature:'unidentified'}]}}),/natureza/);
   assert.equal(initial.transactions.length,0);
 });
+
+
+test('OCR com valores plausíveis oferece releitura visual opcional e exige consentimento específico', () => {
+  const rows = documentDrafts([{text: 'Conta de energia\nTotal R$ 182,34\nVencimento 25/11/2026'}]);
+  assert.equal(rows[0].ambiguities.length, 0);
+  const suggestions = offerSecondReadings('ocr-account', 'ocr-safe-hash', rows, [{method:'ocr'}]);
+  assert.deepEqual(suggestions.map(item => item.page), [1]);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'other-account', 'ocr-safe-hash'), null);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'ocr-account', 'ocr-safe-hash'), 1);
+  assert.equal(redeemSecondReading(suggestions[0].token, 'ocr-account', 'ocr-safe-hash'), null);
+  assert.deepEqual(offerSecondReadings('pdf-text-account', 'pdf-text-hash', rows, [{method:'text'}]), []);
+});
