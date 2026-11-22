@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     try {
       const pages = await readDocument(bytes, mime);
       const rows = documentDrafts(pages);
-      return jsonResponse({ hash, pages, rows, offers: visionConfigured(config) ? offerSecondReadings(ownerId,hash,rows) : [] });
+      return jsonResponse({ hash, pages, rows, offers: visionConfigured(config) ? offerSecondReadings(ownerId,hash,rows,pages) : [] });
     } catch { throw new RepositoryError(422, 'Falha na leitura. Confira a nitidez, o tamanho e o limite de quatro páginas.'); }
   } catch (err) { return errorResponse(err); }
 }
