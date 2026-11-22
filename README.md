@@ -68,3 +68,11 @@ Controles e limites das nove categorias estão em [OWASP LLM 2026](docs/OWASP-LL
 ## Groq
 
 No ambiente privado do servidor, use `AI_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-20b`, `GROQ_API_KEY` e `AI_ENABLED=true`. A integração usa Chat Completions com JSON Schema estrito. A autorização anterior para a OpenAI não habilita o envio à Groq. O usuário pode ativar a opção correspondente em Configurações.
+
+### Revisão de documentos financeiros
+
+Em **Lançamentos**, **Extrair dados** lê até quatro páginas localmente. PDFs digitais preservam a ordem visual. Páginas escaneadas usam Tesseract em português. A transcrição e a camada digital de páginas mistas ficam disponíveis para conferência. Há um limite de 40 lançamentos por documento. Saldos, totais e resumos identificados pelo parser ficam fora das movimentações.
+
+Com `AI_ENABLED=true`, `AI_PROVIDER=groq`, chave e modelo de texto configurados, **Melhorar interpretação com IA** permite autorizar o envio da transcrição de uma página por vez. O servidor valida a estrutura JSON e confere os trechos, datas e valores citados. A sugestão só altera campos ao ser adotada. A comparação por imagem usa a configuração de visão e autorização próprias. Ambas consomem as cotas compartilhadas por conta (20 por dia) e global (`AI_GLOBAL_DAILY_LIMIT`, padrão 200). Erros mantêm a revisão local disponível.
+
+**Selecionar todos os válidos** aplica os mesmos critérios da seleção individual e da confirmação. Ambiguidades e diferenças exigem conferência no original. Edições inválidas desfazem a seleção. Apenas **Confirmar e adicionar** envia os lançamentos selecionados. Reenvios são identificados pelo hash do documento e pelo identificador da linha. Uma data e um valor iguais aos de outro documento geram aviso para conferência.

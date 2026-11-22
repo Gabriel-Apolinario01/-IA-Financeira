@@ -47,7 +47,7 @@ test('tabela de fatura separa compras, preserva linha ambígua para revisão e e
 });
 test('confirmação atômica preserva correções, observações, total e identidade após recarga', () => {
   const initial = emptyState();
-  const rows = [{line:1, nature:'expense', type:'expense', category:'moradia', amount:18234,
+  const rows = [{line:1, currency:'BRL', nature:'expense', type:'expense', category:'moradia', amount:18234,
     date:'2026-11-25', description:'Energia revisada', note:'Mês de outubro', status:'planned'}];
   const command = {id:'confirm', type:'document.confirm', payload:{hash:'a'.repeat(64),rows}};
   const state = JSON.parse(JSON.stringify(applyCommand(initial, command)));

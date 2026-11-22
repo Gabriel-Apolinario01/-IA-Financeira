@@ -21,7 +21,7 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   const databaseDir = path.resolve(root, randomUUID());
   assert.ok(databaseDir.startsWith(root + path.sep));
   await mkdir(root, { recursive: true });
-  const port = 55439, password = randomBytes(24).toString('hex');
+  const port = Number(process.env.TEST_POSTGRES_PORT || 55439), password = randomBytes(24).toString('hex');
   const cluster = new EmbeddedPostgres({ databaseDir, port, user: 'postgres', password,
     // Windows/OneDrive may still hold cluster files after shutdown. Keep ignored test files.
     persistent: true, authMethod: 'scram-sha-256', postgresFlags: ['-h', '127.0.0.1'],
@@ -134,4 +134,25 @@ test('PostgreSQL real: cadastro, senha, sessão, isolamento, persistência, CSRF
   assert.equal(accepted.status,200); assert.equal((await accepted.json()).page,1);
   assert.equal((await second(retry.offers[0].token)).status,400);
   assert.equal(calls,2); assert.deepEqual(await snapshot(bob),beforeReading);
+  process.env.AI_ENABLED = 'true';
+  process.env.AI_PROVIDER = 'groq';
+  process.env.GROQ_MODEL = 'test-only';
+  process.env.AI_GLOBAL_DAILY_LIMIT = '3';
+  const interpret = (consent:boolean) => documentPost(upload(alice,bytes,{
+    'x-document-action':'interpret','x-document-page':'1',...(consent ? {'x-document-text-consent':'once'} : {}),
+  }));
+  const beforeText = await snapshot(alice);
+  assert.equal((await interpret(false)).status,403);
+  assert.equal(calls,2);
+  t.mock.method(globalThis,'fetch',async (_url:string,options:RequestInit) => {
+    calls++;
+    const payload = JSON.parse(String(options.body));
+    assert.match(payload.messages[1].content,/182,34/);
+    assert.doesNotMatch(payload.messages[1].content,/image_url|base64/);
+    return Response.json({choices:[{finish_reason:'stop',message:{content:'{"transactions":[]}'}}]});
+  });
+  assert.equal((await interpret(true)).status,200);
+  assert.equal((await interpret(true)).status,429);
+  assert.equal(calls,3);
+  assert.deepEqual(await snapshot(alice),beforeText);
 });

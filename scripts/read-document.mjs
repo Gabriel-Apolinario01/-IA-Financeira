@@ -61,7 +61,7 @@ async function readImage(bytes, mime) {
   const meta = await image.metadata();
   if (meta.format !== mimeFormats.get(mime) || !meta.width || !meta.height ||
       meta.width * meta.height > maxPixels || (meta.pages ?? 1) !== 1) throw Error();
-  const prepared = await image.rotate().resize({ width: 2400, height: 3200, fit: 'inside', withoutEnlargement: true })
+  const prepared = await image.rotate().resize({ width: Math.min(2400, Math.max(meta.width,meta.height) * 2), height: 3200, fit: 'inside', withoutEnlargement: Math.min(meta.width,meta.height) >= 500 })
     .flatten({ background: 'white' }).grayscale().normalize().png().toBuffer();
   const worker = await createWorker('por', OEM.LSTM_ONLY, { langPath: portuguese.langPath, cacheMethod: 'none' });
   try {
@@ -108,15 +108,19 @@ async function readPdf(bytes, preview) {
       const nativeText = text.trim();
       const hasText = nativeText.length >= 12 && /\p{L}/u.test(nativeText);
       const mixed = hasText && (await page.getOperatorList()).fnArray.some(op => images.has(op));
+      const positions = content.items.filter(item => item.str?.trim()).map(item => ({
+        text:item.str, x:item.transform[4], y:item.transform[5],
+      }));
+      const layout = Buffer.byteLength(JSON.stringify(positions)) <= 24000 ? {positions} : {layoutOmitted:true};
       if (hasText && !mixed) {
-        results.push({ method: 'text', text: text.trim() });
+        results.push({ method: 'text', text: text.trim(), ...layout });
       } else {
         const scaled = page.getViewport({ scale: Math.min(2.5, 2400 / viewport.width, 3200 / viewport.height) });
         const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
         await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport: scaled }).promise;
         const reading = await readImage(canvas.toBuffer('image/png'), 'image/png');
         // Read the visible page in layout order. Appending two transcripts duplicates receipts and rows.
-        results.push(mixed ? { method: 'mixed', text: reading.text || nativeText } : reading);
+        results.push(mixed ? { method: 'mixed', text: reading.text || nativeText, nativeText, ...layout } : reading);
       }
       page.cleanup();
     }

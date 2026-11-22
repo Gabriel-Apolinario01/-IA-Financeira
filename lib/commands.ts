@@ -1,3 +1,4 @@
+import { coherentNature } from './document-review';
 import { assertMoney, estimateSaving, isValidDate, isValidMonth, MAX_MONEY, MAX_RECORDS, safeSum, monthMetrics, budgetEffect, validateRefundLinks } from './finance';
 import { CATEGORIES, type Budget, type Command, type Debt, type FinanceState, type Goal, type Movement, type Profile, type SavingAction, type Transaction } from './types';
 
@@ -135,13 +136,14 @@ export function applyCommand(state: FinanceState, command: Command): FinanceStat
       const seen = new Set<number>();
       for (const input of payload.rows) {
         const row = object(input, 'Lançamento revisado');
-        if (typeof row.line !== 'number' || !Number.isInteger(row.line) || row.line < 1 || row.line > 40 || seen.has(row.line))
+        if (typeof row.line !== 'number' || !Number.isInteger(row.line) || row.line < 1 || row.line > 64040 || seen.has(row.line))
           throw new Error('Revise a seleção de linhas do documento.');
         seen.add(row.line);
         const key = 'doc_' + payload.hash + '_' + row.line;
         if (next.transactions.some(t => t.id === key)) throw new Error('Lançamento deste documento já adicionado.');
         const nature = validateTransactionNature(row.nature);
-        if (nature === 'unidentified' || (nature === 'income' && row.type !== 'income') || (nature === 'expense' && row.type !== 'expense'))
+        if (row.currency !== 'BRL') throw new Error('Confirme a moeda em reais.');
+        if (!coherentNature(nature,row.type))
           throw new Error('Confirme a natureza e a direção do lançamento.');
         const entry = transaction({ ...row, id: key, expenseKind: 'variable' });
         next = applyCommand(next, { id: request.id as string, type: 'transaction.save', payload: { ...entry } });

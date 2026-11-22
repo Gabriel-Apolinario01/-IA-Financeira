@@ -90,13 +90,23 @@ export function documentDrafts(pages: { text: string }[]) {
       previousTable = context;
       let items = 0;
       let footer = false;
-      for (const entry of lines.slice(table+1)) {
+      const entries = lines.slice(table+1);
+      for (let i = 0; i < entries.length; i++) {
+        let entry = entries[i];
         const repeated = documentTableHeader(entry);
         if (repeated) { context = documentTableContext([entry], repeated, context); previousTable = context; footer = false; continue; }
         const content = fold(entry).replace(/^\d{1,2}(?:\/\d{1,2}\/\d{4})?\s+/, '');
+        if (/^(?:resumo do relacionamento|(?:resumo de )?investimentos|aplicacoes financeiras)\b/.test(content)) break;
         if (/^(?:total|totais|saldo|subtotal|limite|resumo)\b/.test(content)) { footer = true; continue; }
         if (footer && !/^\d{1,2}(?:\/\d{1,2}\/\d{4})?\s/.test(entry)) continue;
         if (rows.length >= 40) throw new Error('O documento excede 40 lançamentos. Separe-o antes de enviar.');
+        const following = entries[i+1] ?? '';
+        if (/^\d{1,2}(?:\/\d{1,2}\/\d{4})?\s/.test(entry) && !/\d,\d{2}/.test(entry)
+            && /^[\p{L}]/u.test(following) && !/^(?:saldo|total|resumo|investimentos|limite)\b/.test(fold(following))
+            && !documentTableHeader(following) && /\d,\d{2}\s*$/.test(following)) {
+          entry += ' ' + following;
+          i++;
+        }
         rows.push(documentTableRow(entry, context, index + 1, rows.length + 1)); items++;
       }
       if (items) continue;

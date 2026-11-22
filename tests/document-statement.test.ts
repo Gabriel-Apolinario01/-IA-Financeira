@@ -123,16 +123,20 @@ test('extrato com Dia e mês de referência explícito separa movimentos e desca
     '04 Compra com cartão 37,90',
     '05 Transferência recebida 1.907,99',
     '11 Depósito Online 160,00',
+    '11 Recebimento de',
+    'proventos 3.896,33',
     'Resumo do relacionamento',
     'Saldo final 2.000,00',
+    '12 Investimentos 10.000,00',
   ].join('\n'));
   assert.deepEqual(rows.map(r => [r.date, r.amount, r.direction]), [
     ['2018-07-02', 22442, 'income'],
     ['2018-07-04', 3790, 'expense'],
     ['2018-07-05', 190799, 'income'],
     ['2018-07-11', 16000, 'income'],
+    ['2018-07-11', 389633, 'income'],
   ]);
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 5);
   assert.equal(rows[2].nature, 'transfer'); // Destination ownership remains unknown.
   assert.ok(rows.every(r => r.currency === 'BRL' && r.kind === 'Extrato bancário'));
 });
@@ -147,4 +151,9 @@ test('dia sem mês, texto OCR inválido e moeda ausente não criam datas ou valo
   const noCurrency = parse('Extrato\nMês referência: Julho / 2018\nDia Histórico Valor\n02 Recebimento 224,42');
   assert.equal(noCurrency[0].currency, null);
   assert.equal(noCurrency[0].amount, null);
+});
+
+test('extrato com cheque, cartão e juros mantém débitos separados do saldo e do resumo', () => {
+  const rows = parse('Extrato em reais\nData Histórico Débito Crédito Saldo\n03/11/2026 Cheque compensado 200,00 - 800,00\n04/11/2026 Compra com cartão 18,00 - 782,00\n05/11/2026 Juros 2,00 - 780,00\nResumo do relacionamento\n06/11/2026 Investimentos - 800,00 1.580,00');
+  assert.deepEqual(rows.map(r => [r.amount,r.direction]),[[20000,'expense'],[1800,'expense'],[200,'expense']]);
 });

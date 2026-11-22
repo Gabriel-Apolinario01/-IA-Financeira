@@ -47,7 +47,7 @@ test('PDF digital em colunas posicionadas reconstruídas pela coordenada visual'
   put('Extrato bancario BRL', 20, 374);
   [['Data',20],['Historico',132],['Credito',340],['Debito',428],['Saldo',524]]
     .forEach(([value,x]) => put(String(value), Number(x), 344));
-  [['02/11/2026',20],['Recebimento',132],['900,00',340],['-',428],['900,00',524]]
+  [['900,00',524],['-',428],['02/11/2026',20],['900,00',340],['Recebimento',132]]
     .forEach(([value,x]) => put(String(value), Number(x), 316));
   [['03/11/2026',20],['Padaria',132],['-',340],['20,00',428],['880,00',524]]
     .forEach(([value,x]) => put(String(value), Number(x), 288));
