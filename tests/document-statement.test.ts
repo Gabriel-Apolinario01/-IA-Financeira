@@ -111,3 +111,40 @@ test('campos extraídos permanecem corretos após confirmação e duplicata cont
   assert.deepEqual([state.transactions[0].amount, state.transactions[0].date, state.transactions[0].description], [24590, '2026-11-03', 'SUPERMERCADO CENTRAL']);
   assert.throws(() => applyCommand(state, command), /já adicionado/);
 });
+
+
+test('extrato com Dia e mês de referência explícito separa movimentos e descarta saldos', () => {
+  const rows = parse([
+    'Extrato de conta corrente BRL',
+    'Mês referência: Julho / 2018',
+    'Dia Histórico Valor',
+    '22 Saldo Anterior 149,93',
+    '02 Recebimento de proventos 224,42',
+    '04 Compra com cartão 37,90',
+    '05 Transferência recebida 1.907,99',
+    '11 Depósito Online 160,00',
+    'Resumo do relacionamento',
+    'Saldo final 2.000,00',
+  ].join('\n'));
+  assert.deepEqual(rows.map(r => [r.date, r.amount, r.direction]), [
+    ['2018-07-02', 22442, 'income'],
+    ['2018-07-04', 3790, 'expense'],
+    ['2018-07-05', 190799, 'income'],
+    ['2018-07-11', 16000, 'income'],
+  ]);
+  assert.equal(rows.length, 4);
+  assert.equal(rows[2].nature, 'transfer'); // Destination ownership remains unknown.
+  assert.ok(rows.every(r => r.currency === 'BRL' && r.kind === 'Extrato bancário'));
+});
+
+test('dia sem mês, texto OCR inválido e moeda ausente não criam datas ou valores inventados', () => {
+  const missingDate = parse('Extrato BRL\nDia Histórico Valor\n02 Recebimento 224,42');
+  assert.equal(missingDate.length, 1);
+  assert.equal(missingDate[0].date, '');
+  assert.match(missingDate[0].ambiguities.join(' '), /Mês e ano/);
+  const corrupt = parse('Extrato BRL\nMês referência: Julho / 2018\nDia Histórico Valor\n02 Recebimento 22442');
+  assert.equal(corrupt[0].amount, null);
+  const noCurrency = parse('Extrato\nMês referência: Julho / 2018\nDia Histórico Valor\n02 Recebimento 224,42');
+  assert.equal(noCurrency[0].currency, null);
+  assert.equal(noCurrency[0].amount, null);
+});
