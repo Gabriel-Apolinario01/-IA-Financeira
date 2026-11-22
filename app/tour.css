@@ -1,0 +1,31 @@
+.tour-help { position: relative; }
+.tour-help .help-button { display: inline-flex; min-height: 44px; }
+.tour-help-options { position: absolute; right: 0; top: calc(100% + 8px); width: 240px; max-width: calc(100vw - 30px); z-index: 40; padding: 8px; background: #fffefa; border: 1px solid #d5dfce; border-radius: 12px; box-shadow: 0 8px 30px #173c2926; }
+.tour-help-options button { display: block; width: 100%; padding: 12px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: #244936; font-size: 14px; }
+.tour-help-options button:hover { background: #edf3e7; }
+.tour-invite { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px; margin-bottom: 24px; border: 1px solid #d5dfce; background: #f0f5e9; border-radius: 14px; }
+.tour-invite > div { flex: 1 1 260px; }
+.tour-invite strong { font-size: 16px; color: #244936; }
+.tour-invite p { font-size: 14px; margin-top: 6px; color: #52664b; }
+.document-help { margin-bottom: 12px; text-align: left; }
+.finance-tour.driver-popover { font-family: inherit; color: #203e30; background: #fffefa; border-radius: 16px; padding: 24px; width: 340px; min-width: 0; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; box-shadow: 0 12px 40px #102d2a33; }
+.finance-tour .driver-popover-title { font-family: inherit; font-weight: 600; font-size: 21px; line-height: 1.25; padding-right: 42px; }
+.finance-tour .driver-popover-description { font-size: 15px; line-height: 1.55; margin-top: 12px; }
+.finance-tour .driver-popover-footer { gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+.finance-tour .driver-popover-progress-text { color: #52664b; font-size: 13px; }
+.finance-tour .driver-popover-navigation-btns { gap: 8px; }
+.finance-tour .driver-popover-footer button, .finance-tour .tour-replay { font-family: inherit; font-size: 14px; font-weight: 600; text-shadow: none; min-height: 42px; padding: 9px 14px; border: 1px solid #c7d4bf; border-radius: 8px; background: #f3f6ee; color: #244936; }
+.finance-tour .driver-popover-footer .driver-popover-next-btn { background: #28553f; border-color: #28553f; color: #fff; }
+.finance-tour .driver-popover-close-btn { font-family: inherit; font-size: 12px; width: auto; height: 40px; padding: 8px; top: 5px; right: 8px; color: #405b39; }
+.finance-tour .tour-replay { display: block; margin-top: 14px; }
+.tour-help button:focus-visible, .tour-invite button:focus-visible, .document-help:focus-visible, .finance-tour button:focus-visible { outline: 3px solid #9b6424; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .tour-help .help-button { min-width: 44px; padding: 8px; }
+  .tour-help .help-button > span { display: none; }
+  .topbar-right { gap: 6px; }
+  .topbar-right .mode-tag { display: none; }
+  .finance-tour.driver-popover { padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .driver-active *, .driver-active *::before, .driver-active *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}

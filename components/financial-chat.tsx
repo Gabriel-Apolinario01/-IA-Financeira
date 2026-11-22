@@ -38,7 +38,7 @@ export function FinancialChat({ month, account }: { month: string; account: bool
       if (active.current === controller) { active.current=null; setPending(false); }
     }
   }
-  return <section className="card financial-chat"><header className="card-heading"><h2>Conversa sobre finanças</h2>
+  return <section className="card financial-chat" data-tour="financial-chat" data-tour-busy={pending}><header className="card-heading"><h2>Conversa sobre finanças</h2>
     {account && <button className="button secondary" onClick={reset}>Nova conversa</button>}</header>
     {!account ? <p><Link href="/login">Entre na sua conta</Link> para conversar. Os guias educativos e o simulador estão disponíveis na demonstração.</p> : <>
     <label className="checkbox"><input type="checkbox" checked={messages} onChange={e=>{reset();setMessages(e.target.checked);}}/>Autorizar a Groq a receber minha pergunta e o contexto recente desta conversa. Evite incluir dados pessoais.</label>
@@ -50,7 +50,7 @@ export function FinancialChat({ month, account }: { month: string; account: bool
       {!!t.answer.facts.length && <ul>{t.answer.facts.map(v=><li key={v}>{v}</li>)}</ul>}
       {t.answer.sources.map(s=><a className="source-link" key={s.url} href={s.url} rel="noopener noreferrer" target="_blank">{s.title}</a>)}
     </article>)}</div>
-    <form onSubmit={submit}><label htmlFor="chat-question">Sua pergunta</label><input id="chat-question" maxLength={600} value={question} onChange={e=>setQuestion(e.target.value)} disabled={pending || turns.length>=20}/>
+    <form onSubmit={submit}><label htmlFor="chat-question">Sua pergunta</label><input id="chat-question" data-tour="chat-question" maxLength={600} value={question} onChange={e=>setQuestion(e.target.value)} disabled={pending || turns.length>=20}/>
       <small>{question.length}/600 caracteres</small>
       <button className="button primary" disabled={pending || !question.trim() || turns.length>=20}>Enviar pergunta</button></form>
     <p role="status">{pending ? 'Preparando a resposta…' : turns.length>=20 ? 'Inicie uma nova conversa para continuar.' : ''}</p>
